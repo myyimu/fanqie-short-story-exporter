@@ -12,7 +12,7 @@
 
 ### Windows：下载免安装版
 
-1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.2.0/FanqieShortStoryExporter-0.2.0-Windows.zip) 并解压。
+1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.2.1/FanqieShortStoryExporter-0.2.1-Windows.zip) 并解压。
 2. 双击 `FanqieShortStoryExporter.exe`。程序会自动在浏览器中打开本机界面，无需另装 Python。
 3. 用完后点击界面右上角的「退出」。当前 EXE 未做代码签名，运行前请核对下载来源。
 
@@ -31,12 +31,12 @@ fanqie-short-story-ui
 
 ## 界面预览
 
-![Fanqie Short Story Exporter 桌面界面，左侧填写分享链接和导出选项，右侧显示书本预览](docs/images/desktop.png)
+![桌面界面示例：同时选择 TXT 与 Markdown 导出](docs/images/desktop.png)
 
 ## 使用教程
 
 1. 复制一条番茄短故事分享链接，页面地址应以 `https://changdunovel.com/ug/pages/short-story-share` 开头。将完整链接粘贴到「短故事分享链接」输入框。
-2. 选择 TXT、Markdown 或两者；再选择正文图片的处理方式。默认同时生成 TXT 和 Markdown，并在 Markdown 中保留在线图片地址。
+2. 选择 TXT、Markdown 或两者；再选择正文图片的处理方式。界面默认只选 TXT。
 3. 点击「下载故事」。文件由浏览器保存到你的下载目录：只选一种文本格式时直接下载该文件；同时选两种格式或选择「下载图片」时下载 ZIP。
 
 TXT 无法嵌入图片，会标记图片在正文中的位置。若只选择 TXT，「下载图片」不可选。在线图片地址可能过期；需要离线阅读图片时，请选择 Markdown 和「下载图片」（界面最多支持 12 张正文图片）。下载完成后可点「再次下载」，结束使用时点右上角「退出」。
@@ -63,8 +63,8 @@ fanqie-short-story - -o downloads -f md --images download
 
 ## 使用范围与注意事项
 
-- 一次处理一条 `changdunovel.com` 短故事分享链接。工具使用链接原有的 `percent` 值；站点返回多少内容，就导出多少，不能据此保证一定是全文。
-- 无需登录或提供账号密码，不读取浏览器 Cookie；不模拟广告解锁，不绕过付费、访问控制或反爬，也不提供批量发现功能。
+- 一次处理一条 `changdunovel.com` 短故事分享链接。下载时将请求中的 `percent` 设为 `100`；仅导出站点实际返回的内容，不保证每条链接都是全文。
+- 无需登录或提供账号密码，不读取浏览器 Cookie，也不提供批量发现功能。
 - 程序不会主动记录分享链接，导出文件也不包含原链接。粘贴时输入框会显示完整链接，请勿在截图中公开个人或设备标识。
 
 ## 免责声明
@@ -77,4 +77,4 @@ fanqie-short-story - -o downloads -f md --images download
 python -m unittest discover -s tests -v
 ```
 
-项目采用 [MIT 许可证](LICENSE)。网络接口由平台维护，字段或访问方式可能变化；遇到错误时工具会停止，不会自动重试或改变链接参数。
+项目采用 [MIT 许可证](LICENSE)。网络接口由平台维护，字段或访问方式可能变化；遇到错误时工具会停止，不会自动重试。

@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 SHARE_PATH = "/ug/pages/short-story-share"
 DETAIL_PATH = "/reading/ugc/postdata/detail/v1/"
 ORIGIN = "https://changdunovel.com"
+EXPORT_PERCENT = 100
 
 
 def _one(query: dict[str, list[str]], name: str, default: str = "") -> str:
@@ -48,10 +49,10 @@ class ShareLink:
 
         raw_percent = _one(query, "percent")
         try:
-            percent = int(raw_percent)
+            input_percent = int(raw_percent)
         except ValueError as error:
             raise ValueError("链接缺少有效的 percent") from error
-        if not 1 <= percent <= 100:
+        if not 1 <= input_percent <= 100:
             raise ValueError("只接受链接中 1–100 的预览比例")
 
         aid = _one(query, "aid")
@@ -65,7 +66,8 @@ class ShareLink:
             if not value.isascii() or not value.isdecimal():
                 raise ValueError(f"链接缺少有效的 {name}")
 
-        return cls(post_id, share_code, percent, aid, version_code, forum_book_id)
+        # Use the full share-page percentage for both the request header and Referer.
+        return cls(post_id, share_code, EXPORT_PERCENT, aid, version_code, forum_book_id)
 
     @property
     def detail_url(self) -> str:

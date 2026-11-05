@@ -18,7 +18,7 @@ from fanqie_short_story.web import LocalServer, prepare_export
 LINK = (
     "https://changdunovel.com/ug/pages/short-story-share"
     "?post_id=123456&post_type=13&aid=1967&update_version_code=74332"
-    "&forum_book_id=0&percent=100&share_code=test%3D"
+    "&forum_book_id=0&percent=30&share_code=test%3D"
     "&user_id=private-user&did=private-device&share_token=private-token"
 )
 HTML = '<p>开头。</p><p><img src="https://p3-reading-sign.fqnovelpic.com/image.jpg"></p><p>结尾。</p>'
@@ -27,8 +27,9 @@ STORY = Story("示例故事", "作者", "123456", "789", HTML, "开头。结尾�
 
 class PrepareExportTests(unittest.TestCase):
     def test_single_text_is_direct_download_without_link_identifiers(self):
-        with patch("fanqie_short_story.web.fetch_story", return_value=STORY):
+        with patch("fanqie_short_story.web.fetch_story", return_value=STORY) as fetch:
             result = prepare_export(LINK, ["txt"], "remote")
+        self.assertEqual(fetch.call_args.args[0].percent, 100)
         self.assertEqual(result.name, "示例故事-123456.txt")
         self.assertIn("开头。", result.data.decode("utf-8"))
         self.assertNotIn(b"private-token", result.data)

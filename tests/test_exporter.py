@@ -19,7 +19,7 @@ from fanqie_short_story.render import parse_blocks, render_markdown, render_txt
 LINK = (
     "https://changdunovel.com/ug/pages/short-story-share"
     "?post_id=123456&post_type=13&aid=1967&update_version_code=74332"
-    "&forum_book_id=0&percent=100&share_code=test%3D"
+    "&forum_book_id=0&percent=30&share_code=test%3D"
     "&user_id=private-user&did=private-device&share_token=private-token"
 )
 HTML = '<p>1.</p><p>第一段。</p><p class="picture"><img src="https://p3-reading-sign.fqnovelpic.com/image.jpg?x=1&amp;y=2"></p><p>结尾。</p>'
@@ -55,10 +55,12 @@ class FakeImageResponse:
 
 
 class ShareLinkTests(unittest.TestCase):
-    def test_link_keeps_percent_and_removes_tracking_from_request(self):
+    def test_link_requests_100_percent_without_forwarding_tracking(self):
         link = ShareLink.parse(LINK)
         self.assertEqual(link.percent, 100)
         self.assertIn("post_id=123456", link.detail_url)
+        self.assertIn("percent=100", link.referer)
+        self.assertNotIn("percent=30", link.referer)
         for secret in ("private-user", "private-device", "private-token"):
             self.assertNotIn(secret, link.referer)
             self.assertNotIn(secret, link.detail_url)
@@ -67,11 +69,11 @@ class ShareLinkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ShareLink.parse(LINK.replace("changdunovel.com", "example.com"))
         with self.assertRaises(ValueError):
-            ShareLink.parse(LINK.replace("percent=100", "percent=300"))
+            ShareLink.parse(LINK.replace("percent=30", "percent=300"))
 
 
 class ClientTests(unittest.TestCase):
-    def test_fetches_normal_detail_response_without_changing_percent(self):
+    def test_fetches_detail_response_with_100_percent_request(self):
         link = ShareLink.parse(LINK)
         seen = {}
 
@@ -96,6 +98,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(story.title, "示例故事")
         self.assertEqual(story.book_id, "789")
         self.assertEqual(seen["headers"]["Percent"], "100")
+        self.assertIn("percent=100", seen["headers"]["Referer"])
         self.assertEqual(seen["headers"]["Share-code"], "test=")
         self.assertEqual(seen["timeout"], 20)
 
@@ -142,10 +145,11 @@ class RenderTests(unittest.TestCase):
 
     def test_cli_writes_both_files_without_source_url(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch("fanqie_short_story.cli.fetch_story", return_value=self.story):
+            with patch("fanqie_short_story.cli.fetch_story", return_value=self.story) as fetch:
                 with redirect_stdout(io.StringIO()):
                     code = main([LINK, "--output-dir", directory])
             self.assertEqual(code, 0)
+            self.assertEqual(fetch.call_args.args[0].percent, 100)
             exported = list(Path(directory).iterdir())
             self.assertEqual({p.suffix for p in exported}, {".txt", ".md"})
             for path in exported:
