@@ -1,0 +1,44 @@
+name: Build Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        default: v0.2.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Windows package
+        shell: pwsh
+        run: ./packaging/build_windows.ps1
+
+      - name: Attach ZIP to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $zip = Get-ChildItem -LiteralPath dist -Filter 'FanqieShortStoryExporter-*-Windows.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'Windows ZIP not found' }
+          gh release upload "$env:RELEASE_TAG" "$($zip.FullName)" --repo "$env:GITHUB_REPOSITORY"
