@@ -6,9 +6,7 @@
 
 **番茄短篇下载器**：将你有权访问的番茄小说短故事分享页内容保存为 UTF-8 TXT 或 Markdown。无需登录账号；粘贴链接、选择格式、点击下载。支持本机浏览器界面和命令行。
 
-![Fanqie Short Story Exporter 桌面界面，左侧填写分享链接和导出选项，右侧显示书本预览](docs/images/desktop.png)
-
-<p align="center"><img src="docs/images/mobile.png" alt="窄屏下载中的书本翻页加载状态示意" width="360"></p>
+![Fanqie Short Story Exporter 项目封面](docs/images/cover.png)
 
 ## 快速开始
 
@@ -30,6 +28,10 @@ fanqie-short-story-ui
 浏览器会自动打开本机页面。如果没有打开，请访问终端显示的地址。默认地址是 `http://127.0.0.1:8765`；端口被占用时可运行 `fanqie-short-story-ui --port 0`。界面只监听本机。
 
 要自己制作 Windows EXE，可在 PowerShell 中运行 `.\packaging\build_windows.ps1`；详见 [打包说明](packaging/README.md)。
+
+## 界面预览
+
+![Fanqie Short Story Exporter 桌面界面，左侧填写分享链接和导出选项，右侧显示书本预览](docs/images/desktop.png)
 
 ## 使用教程
 
