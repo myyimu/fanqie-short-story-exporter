@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="local-token" content="__LOCAL_TOKEN__">
+  <title>Fanqie Short Story Exporter</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><strong>Fanqie Short Story Exporter</strong></div>
+      <button type="button" class="exit-button" id="exit-button">退出</button>
+    </header>
+
+    <main class="workspace">
+      <section class="editor">
+        <div class="eyebrow" aria-hidden="true"><span></span><i>✦</i></div>
+        <h1>喜欢的故事，<br><em>值得好好保存。</em></h1>
+        <p class="intro">粘贴链接，下载 TXT 或 Markdown。</p>
+
+        <form id="export-form" novalidate>
+          <label class="field-label" for="story-url">短故事分享链接</label>
+          <div class="url-wrap"><span aria-hidden="true">↗</span><textarea id="story-url" name="url" rows="3" spellcheck="false" autocomplete="off" placeholder="粘贴短故事分享链接"></textarea></div>
+
+          <fieldset class="choice-group">
+            <legend>保存格式</legend>
+            <div class="formats">
+              <label><input type="checkbox" name="format" value="txt" checked><span class="format-card"><b class="file-icon">T</b><strong>TXT</strong><i aria-hidden="true">✓</i></span></label>
+              <label><input type="checkbox" name="format" value="md" checked><span class="format-card"><b class="file-icon md-icon">M</b><strong>Markdown</strong><i aria-hidden="true">✓</i></span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="choice-group images-group">
+            <legend>正文图片</legend>
+            <div class="image-choices">
+              <label><input type="radio" name="images" value="remote" checked><span id="remote-image-label">保留在线图片</span></label>
+              <label><input type="radio" name="images" value="download"><span>下载图片</span></label>
+              <label><input type="radio" name="images" value="skip"><span>不保留图片</span></label>
+            </div>
+          </fieldset>
+
+          <div id="error-box" class="error-box" role="alert" hidden></div>
+          <button type="submit" class="export-button" id="export-button"><span id="button-text">下载故事</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <div class="mobile-book-loader" id="mobile-book-loader" hidden aria-hidden="true"><span class="mini-book"><i></i><i></i><i></i></span></div>
+          <div id="status-line" class="sr-only" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <aside class="preview" id="preview" aria-label="导出预览">
+        <div class="preview-top"><span>预览</span><span aria-hidden="true">✳</span></div>
+        <div class="book-stage">
+          <div class="orbit orbit-a" aria-hidden="true"></div><div class="orbit orbit-b" aria-hidden="true"></div>
+          <div class="book-shadow" aria-hidden="true"></div>
+          <div class="book-cover">
+            <span class="book-spine" aria-hidden="true"></span>
+            <span class="book-page" aria-hidden="true"></span>
+            <div class="book-inner">
+              <div class="book-top"><span class="book-sun" aria-hidden="true"></span><span>SHORT STORY<br>COLLECTION</span></div>
+              <div class="book-title" id="book-title">下一篇<br>值得收藏<br>的故事</div>
+              <div class="book-bottom"><span class="book-rule"></span><span id="book-author">一个故事，一份存档</span></div>
+            </div>
+          </div>
+          <span class="stage-star star-a" aria-hidden="true">✦</span><span class="stage-star star-b" aria-hidden="true">✳</span>
+        </div>
+        <div class="preview-foot" id="preview-empty"><strong>准备好了</strong></div>
+        <div class="preview-foot" id="loading" hidden><strong>正在整理…</strong></div>
+        <div class="preview-foot result" id="result-panel" hidden><div><strong id="result-title">导出完成</strong><span id="result-meta"></span></div><button type="button" id="again-button">再次下载 ↓</button></div>
+      </aside>
+    </main>
+    <div class="exit-state" id="exit-state" hidden><strong>已退出</strong><span>可以关闭页面。</span></div>
+
+    <footer>仅供学习与技术研究 · 请尊重作品版权与平台规则</footer>
+  </div>
+</body>
+</html>
