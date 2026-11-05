@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fanqie-short-story-exporter"
+version = "0.1.0"
+description = "Export the content returned by a Fanqie short-story share link to TXT or Markdown"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "myyimu"}]
+keywords = ["fanqie", "short-story", "txt", "markdown"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+fanqie-short-story = "fanqie_short_story.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
