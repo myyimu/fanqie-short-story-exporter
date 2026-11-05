@@ -8,7 +8,7 @@
 
 ![Fanqie Short Story Exporter 桌面界面，左侧填写分享链接和导出选项，右侧显示书本预览](docs/images/desktop.png)
 
-<p align="center"><img src="docs/images/mobile.png" alt="窄屏下载中的书本翻页加载状态示意" width="360"><br><sub>窄屏下载时的加载状态示意</sub></p>
+<p align="center"><img src="docs/images/mobile.png" alt="窄屏下载中的书本翻页加载状态示意" width="360"></p>
 
 ## 快速开始
 
