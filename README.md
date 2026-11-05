@@ -32,8 +32,6 @@ fanqie-short-story --version
 - 不记录、展示或写入链接中的 `user_id`、`did`、`share_token` 等个人或设备标识。导出文件也不保存原分享链接。
 - 请仅导出你有权保存的内容，勿传播未获授权的作品文本。
 
-短故事分享页的正文在已测试样本中直接以可读中文返回，**不需要长篇小说的字符解码器**。本项目独立实现，没有复制 [POf-L/Fanqie-novel-Downloader](https://github.com/POf-L/Fanqie-novel-Downloader) 的代码。该仓库当前公开分支没有应用源码或代码许可证，因此仅作为产品功能参考。
-
 ## 开发
 
 ```bash
