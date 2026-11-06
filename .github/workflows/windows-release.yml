@@ -1,12 +1,15 @@
 name: Build Windows release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
         description: Existing release tag
         required: true
-        default: v0.2.0
+        default: v0.3.0
 
 permissions:
   contents: write
@@ -18,7 +21,7 @@ jobs:
       - name: Check out release source
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag || github.ref_name }}
           persist-credentials: false
 
       - name: Set up Python
@@ -33,12 +36,18 @@ jobs:
         shell: pwsh
         run: ./packaging/build_windows.ps1
 
-      - name: Attach ZIP to release
+      - name: Publish Windows release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           $zip = Get-ChildItem -LiteralPath dist -Filter 'FanqieShortStoryExporter-*-Windows.zip' | Select-Object -First 1
           if (-not $zip) { throw 'Windows ZIP not found' }
-          gh release upload "$env:RELEASE_TAG" "$($zip.FullName)" --repo "$env:GITHUB_REPOSITORY"
+          gh release view "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:RELEASE_TAG" "$($zip.FullName)" --clobber --repo "$env:GITHUB_REPOSITORY"
+          } else {
+            gh release create "$env:RELEASE_TAG" "$($zip.FullName)" --title "$env:RELEASE_TAG" --notes '新增 EPUB 导出和手动多链接批量下载。' --repo "$env:GITHUB_REPOSITORY"
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release failed' }
