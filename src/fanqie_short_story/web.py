@@ -7,22 +7,17 @@ import io
 import json
 import secrets
 import sys
-import tempfile
 import threading
 import webbrowser
 import zipfile
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
-from pathlib import Path
 from urllib.parse import quote
 
 from . import __version__
-from .assets import download_images
-from .cli import safe_stem
-from .client import DownloadError, fetch_story
-from .link import ShareLink
-from .render import parse_blocks, render_markdown, render_txt
+from .client import DownloadError
+from .exporter import load_export, render_export
 
 
 MAX_REQUEST_BYTES = 32 * 1024
@@ -45,63 +40,27 @@ class ExportResult:
 
 def prepare_export(raw_url: object, formats: object, images: object) -> ExportResult:
     """Create one downloadable file from the response for the supplied link."""
-    if not isinstance(raw_url, str) or not raw_url or len(raw_url) > 16384:
-        raise ValueError("请粘贴一条有效的短故事分享链接")
-    if (
-        not isinstance(formats, list)
-        or not formats
-        or not all(isinstance(value, str) for value in formats)
-        or set(formats) - {"txt", "md"}
-    ):
-        raise ValueError("请选择 TXT 或 Markdown 格式")
-    if len(formats) != len(set(formats)) or len(formats) > 2:
-        raise ValueError("导出格式重复")
-    if not isinstance(images, str) or images not in {"remote", "download", "skip"}:
-        raise ValueError("请选择有效的插图方式")
-
-    link = ShareLink.parse(raw_url)
-    story = fetch_story(link)
-    blocks = parse_blocks(story.html_content)
-    if not any(block.kind == "text" for block in blocks):
-        raise DownloadError("页面没有可导出的文字正文")
-    if images == "skip":
-        blocks = [block for block in blocks if block.kind != "image"]
-
-    stem = safe_stem(story.title, story.post_id)
-    characters = len(story.plain_content) or sum(
-        len(block.value) for block in blocks if block.kind == "text"
-    )
-    output: dict[str, bytes] = {}
-    if "txt" in formats:
-        output[f"{stem}.txt"] = render_txt(story, blocks).encode("utf-8")
-
-    with tempfile.TemporaryDirectory(prefix="fanqie-export-") as temporary:
-        image_paths: dict[int, str] = {}
-        if "md" in formats and images == "download":
-            image_count = sum(block.kind == "image" for block in blocks)
-            if image_count > MAX_OFFLINE_IMAGES:
-                raise DownloadError(f"离线插图最多支持 {MAX_OFFLINE_IMAGES} 张")
-            image_paths = download_images(blocks, Path(temporary), stem)
-        if "md" in formats:
-            output[f"{stem}.md"] = render_markdown(story, blocks, image_paths).encode("utf-8")
-
-        if len(output) == 1 and not image_paths:
-            name, data = next(iter(output.items()))
+    job = load_export(raw_url, formats, images)
+    with render_export(job, max_images=MAX_OFFLINE_IMAGES) as exported:
+        if len(exported.text) == 1 and not exported.images:
+            name, data = next(iter(exported.text.items()))
             content_type = (
                 "text/markdown; charset=utf-8" if name.endswith(".md") else "text/plain; charset=utf-8"
             )
         else:
-            name = f"{stem}.zip"
+            name = f"{job.stem}.zip"
             content_type = "application/zip"
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-                for filename, content in output.items():
+                for filename, content in exported.text.items():
                     bundle.writestr(filename, content)
-                for relative_path in image_paths.values():
-                    bundle.write(Path(temporary) / relative_path, arcname=relative_path)
+                for relative_path, source in exported.images.items():
+                    bundle.write(source, arcname=relative_path)
             data = buffer.getvalue()
 
-    return ExportResult(name, content_type, data, story.title, story.author, characters)
+    return ExportResult(
+        name, content_type, data, job.story.title, job.story.author, job.characters
+    )
 
 
 class LocalServer(ThreadingHTTPServer):

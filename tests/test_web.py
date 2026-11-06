@@ -1,9 +1,11 @@
 import io
 import json
 import sys
+import tempfile
 import threading
 import unittest
 import zipfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -12,6 +14,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from fanqie_short_story.client import Story
+from fanqie_short_story.cli import main as cli_main
 from fanqie_short_story.web import LocalServer, prepare_export
 
 
@@ -27,7 +30,7 @@ STORY = Story("示例故事", "作者", "123456", "789", HTML, "开头。结尾�
 
 class PrepareExportTests(unittest.TestCase):
     def test_single_text_is_direct_download_without_link_identifiers(self):
-        with patch("fanqie_short_story.web.fetch_story", return_value=STORY) as fetch:
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY) as fetch:
             result = prepare_export(LINK, ["txt"], "remote")
         self.assertEqual(fetch.call_args.args[0].percent, 100)
         self.assertEqual(result.name, "示例故事-123456.txt")
@@ -35,15 +38,15 @@ class PrepareExportTests(unittest.TestCase):
         self.assertNotIn(b"private-token", result.data)
 
     def test_two_formats_and_offline_image_form_zip(self):
-        def fake_images(_blocks, output_dir, stem):
+        def fake_images(_blocks, output_dir, stem, *, timeout):
             relative = f"{stem}_assets/image-001.jpg"
             target = output_dir / relative
             target.parent.mkdir(parents=True)
             target.write_bytes(b"image-bytes")
             return {1: relative}
 
-        with patch("fanqie_short_story.web.fetch_story", return_value=STORY):
-            with patch("fanqie_short_story.web.download_images", side_effect=fake_images):
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
+            with patch("fanqie_short_story.exporter.download_images", side_effect=fake_images):
                 result = prepare_export(LINK, ["txt", "md"], "download")
         self.assertTrue(result.name.endswith(".zip"))
         with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
@@ -55,11 +58,33 @@ class PrepareExportTests(unittest.TestCase):
             self.assertIn(b"image-bytes", bundle.read(next(name for name in names if name.endswith(".jpg"))))
 
     def test_invalid_options_are_rejected_before_fetch(self):
-        with patch("fanqie_short_story.web.fetch_story") as fetch:
+        with patch("fanqie_short_story.exporter.fetch_story") as fetch:
             for formats, images in (([], "remote"), (["txt", "txt"], "remote"), (["md"], [])):
                 with self.assertRaises(ValueError):
                     prepare_export(LINK, formats, images)
             fetch.assert_not_called()
+
+    def test_web_and_cli_export_identical_files_with_offline_image(self):
+        def fake_images(_blocks, output_dir, stem, *, timeout):
+            relative = f"{stem}_assets/image-001.jpg"
+            target = output_dir / relative
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"image-bytes")
+            return {1: relative}
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
+                with patch("fanqie_short_story.exporter.download_images", side_effect=fake_images):
+                    web_result = prepare_export(LINK, ["txt", "md"], "download")
+                    with redirect_stdout(io.StringIO()):
+                        cli_code = cli_main(
+                            [LINK, "--output-dir", directory, "--images", "download"]
+                        )
+            self.assertEqual(cli_code, 0)
+            with zipfile.ZipFile(io.BytesIO(web_result.data)) as bundle:
+                self.assertEqual(len(bundle.namelist()), 3)
+                for filename in bundle.namelist():
+                    self.assertEqual(bundle.read(filename), (Path(directory) / filename).read_bytes())
 
 
 class LocalServerTests(unittest.TestCase):
@@ -90,7 +115,7 @@ class LocalServerTests(unittest.TestCase):
             },
             method="POST",
         )
-        with patch("fanqie_short_story.web.fetch_story") as fetch:
+        with patch("fanqie_short_story.exporter.fetch_story") as fetch:
             with self.assertRaises(HTTPError) as error:
                 urlopen(request, timeout=5)
             self.assertEqual(error.exception.code, 403)
@@ -107,7 +132,7 @@ class LocalServerTests(unittest.TestCase):
             },
             method="POST",
         )
-        with patch("fanqie_short_story.web.fetch_story", return_value=STORY):
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
             with urlopen(request, timeout=5) as response:
                 content = response.read()
                 headers = str(response.headers)

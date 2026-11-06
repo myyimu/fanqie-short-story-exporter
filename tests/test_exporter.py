@@ -145,7 +145,7 @@ class RenderTests(unittest.TestCase):
 
     def test_cli_writes_both_files_without_source_url(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch("fanqie_short_story.cli.fetch_story", return_value=self.story) as fetch:
+            with patch("fanqie_short_story.exporter.fetch_story", return_value=self.story) as fetch:
                 with redirect_stdout(io.StringIO()):
                     code = main([LINK, "--output-dir", directory])
             self.assertEqual(code, 0)
