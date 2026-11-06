@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from fanqie_short_story.assets import download_images
 from fanqie_short_story.cli import main, safe_stem
 from fanqie_short_story.client import DownloadError, Story, fetch_story
-from fanqie_short_story.link import ShareLink
+from fanqie_short_story.link import ShareLink, resolve_share_link
 from fanqie_short_story.render import parse_blocks, render_markdown, render_txt
 
 
@@ -22,6 +23,7 @@ LINK = (
     "&forum_book_id=0&percent=30&share_code=test%3D"
     "&user_id=private-user&did=private-device&share_token=private-token"
 )
+SHORT_LINK = "https://changdunovel.com/t/example123/"
 HTML = '<p>1.</p><p>第一段。</p><p class="picture"><img src="https://p3-reading-sign.fqnovelpic.com/image.jpg?x=1&amp;y=2"></p><p>结尾。</p>'
 
 
@@ -55,6 +57,27 @@ class FakeImageResponse:
 
 
 class ShareLinkTests(unittest.TestCase):
+    def test_short_link_uses_only_validated_redirect_fields(self):
+        with patch("fanqie_short_story.link.build_opener") as build:
+            build.return_value.open.side_effect = HTTPError(
+                SHORT_LINK, 302, "Found", {"Location": LINK}, None
+            )
+            link = resolve_share_link(SHORT_LINK)
+        request = build.return_value.open.call_args.args[0]
+        self.assertEqual(request.full_url, SHORT_LINK)
+        self.assertEqual(link.percent, 100)
+        for secret in ("private-user", "private-device", "private-token"):
+            self.assertNotIn(secret, link.referer)
+            self.assertNotIn(secret, link.detail_url)
+
+    def test_short_link_rejects_other_pages(self):
+        with patch("fanqie_short_story.link.build_opener") as build:
+            build.return_value.open.side_effect = HTTPError(
+                SHORT_LINK, 302, "Found", {"Location": "https://changdunovel.com/ug/pages/book-share"}, None
+            )
+            with self.assertRaises(ValueError):
+                resolve_share_link(SHORT_LINK)
+
     def test_link_requests_100_percent_without_forwarding_tracking(self):
         link = ShareLink.parse(LINK)
         self.assertEqual(link.percent, 100)
@@ -156,6 +179,18 @@ class RenderTests(unittest.TestCase):
                 content = path.read_text(encoding="utf-8")
                 self.assertIn("示例故事", content)
                 self.assertNotIn("private-token", content)
+
+    def test_cli_accepts_short_story_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("fanqie_short_story.link.build_opener") as build:
+                build.return_value.open.side_effect = HTTPError(
+                    SHORT_LINK, 302, "Found", {"Location": LINK}, None
+                )
+                with patch("fanqie_short_story.exporter.fetch_story", return_value=self.story):
+                    with redirect_stdout(io.StringIO()):
+                        code = main([SHORT_LINK, "--output-dir", directory, "-f", "txt"])
+            self.assertEqual(code, 0)
+            self.assertEqual(len(list(Path(directory).glob("*.txt"))), 1)
 
 
 if __name__ == "__main__":

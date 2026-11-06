@@ -12,7 +12,7 @@ from typing import Iterator
 
 from .assets import download_images
 from .client import DownloadError, Story, fetch_story
-from .link import ShareLink
+from .link import resolve_share_link
 from .render import Block, parse_blocks, render_markdown, render_txt
 
 
@@ -64,7 +64,7 @@ def load_export(
     if not isinstance(images, str) or images not in {"remote", "download", "skip"}:
         raise ValueError("请选择有效的插图方式")
 
-    link = ShareLink.parse(raw_url)
+    link = resolve_share_link(raw_url, timeout=timeout)
     story = fetch_story(link, timeout=timeout)
     blocks = parse_blocks(story.html_content)
     if not any(block.kind == "text" for block in blocks):

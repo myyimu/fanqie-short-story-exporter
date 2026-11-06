@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 SHARE_PATH = "/ug/pages/short-story-share"
 DETAIL_PATH = "/reading/ugc/postdata/detail/v1/"
 ORIGIN = "https://changdunovel.com"
 EXPORT_PERCENT = 100
+SHORT_PATH = re.compile(r"/t/[A-Za-z0-9_-]{1,256}/?\Z")
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        return None
 
 
 def _one(query: dict[str, list[str]], name: str, default: str = "") -> str:
@@ -98,3 +107,34 @@ class ShareLink:
             }
         )
         return f"{ORIGIN}{SHARE_PATH}?{query}"
+
+
+def resolve_share_link(raw_url: str, *, timeout: float = 20) -> ShareLink:
+    """Accept a full share URL or inspect one public short-link redirect."""
+    parsed = urlsplit(raw_url.strip())
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "changdunovel.com"
+        or parsed.port is not None
+        or not SHORT_PATH.fullmatch(parsed.path)
+    ):
+        return ShareLink.parse(raw_url)
+    if parsed.query or parsed.fragment:
+        raise ValueError("短链接不能包含额外参数")
+
+    short_url = f"{ORIGIN}{parsed.path}"
+    request = Request(short_url, headers={"Accept": "text/html"})
+    try:
+        with build_opener(_NoRedirect()).open(request, timeout=timeout):
+            raise ValueError("短链接没有返回有效的分享页跳转")
+    except HTTPError as response:
+        status = response.code
+        location = response.headers.get("Location")
+        response.close()
+        if status not in {301, 302, 303, 307, 308} or not location:
+            raise ValueError("短链接不可用或已过期") from None
+    except (URLError, TimeoutError) as error:
+        raise ValueError("短链接访问失败或超时") from error
+
+    # Inspect the redirect but never request the target with tracking identifiers.
+    return ShareLink.parse(urljoin(short_url, location))
