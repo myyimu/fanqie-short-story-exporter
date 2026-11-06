@@ -12,6 +12,7 @@ from typing import Iterator
 
 from .assets import download_images
 from .client import DownloadError, Story, fetch_story
+from .epub import render_epub
 from .link import resolve_share_link
 from .render import Block, parse_blocks, render_markdown, render_txt
 
@@ -56,10 +57,10 @@ def load_export(
         not isinstance(formats, (list, tuple))
         or not formats
         or not all(isinstance(value, str) for value in formats)
-        or set(formats) - {"txt", "md"}
+        or set(formats) - {"txt", "md", "epub"}
     ):
-        raise ValueError("请选择 TXT 或 Markdown 格式")
-    if len(formats) != len(set(formats)) or len(formats) > 2:
+        raise ValueError("请选择 TXT、Markdown 或 EPUB 格式")
+    if len(formats) != len(set(formats)) or len(formats) > 3:
         raise ValueError("导出格式重复")
     if not isinstance(images, str) or images not in {"remote", "download", "skip"}:
         raise ValueError("请选择有效的插图方式")
@@ -92,7 +93,7 @@ def render_export(job: ExportJob, *, max_images: int | None = None) -> Iterator[
     with tempfile.TemporaryDirectory(prefix="fanqie-export-") as temporary:
         blocks = list(job.blocks)
         image_paths: dict[int, str] = {}
-        if "md" in job.formats and job.images == "download":
+        if ("md" in job.formats or "epub" in job.formats) and job.images == "download":
             image_count = sum(block.kind == "image" for block in blocks)
             if max_images is not None and image_count > max_images:
                 raise DownloadError(f"离线插图最多支持 {max_images} 张")
@@ -107,5 +108,12 @@ def render_export(job: ExportJob, *, max_images: int | None = None) -> Iterator[
             text_files[f"{job.stem}.md"] = render_markdown(
                 job.story, blocks, image_paths
             ).encode("utf-8")
-        images = {relative: Path(temporary) / relative for relative in image_paths.values()}
+        if "epub" in job.formats:
+            text_files[f"{job.stem}.epub"] = render_epub(
+                job.story, blocks, image_paths, Path(temporary)
+            )
+        images = (
+            {relative: Path(temporary) / relative for relative in image_paths.values()}
+            if "md" in job.formats else {}
+        )
         yield ExportFiles(text_files, images)

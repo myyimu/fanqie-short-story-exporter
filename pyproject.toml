@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fanqie-short-story-exporter"
-version = "0.2.1"
-description = "Export the content returned by a Fanqie short-story share link to TXT or Markdown"
+version = "0.3.0"
+description = "Export the content returned by Fanqie short-story share links to TXT, Markdown or EPUB"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [{name = "myyimu"}]
-keywords = ["fanqie", "short-story", "txt", "markdown"]
+keywords = ["fanqie", "short-story", "txt", "markdown", "epub"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",

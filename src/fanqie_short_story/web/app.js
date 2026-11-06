@@ -11,6 +11,7 @@ const previewEmpty = document.getElementById('preview-empty');
 const mobileLoader = document.getElementById('mobile-book-loader');
 const downloadRadio = document.querySelector('input[name="images"][value="download"]');
 const token = document.querySelector('meta[name="local-token"]').content;
+const maxBatchStories = 10;
 let lastDownload = null;
 
 function showError(message) {
@@ -21,9 +22,10 @@ function showError(message) {
 
 function updateImageOptions() {
   const markdown = document.querySelector('input[name="format"][value="md"]').checked;
-  downloadRadio.disabled = !markdown;
+  const epub = document.querySelector('input[name="format"][value="epub"]').checked;
+  downloadRadio.disabled = !(markdown || epub);
   document.getElementById('remote-image-label').textContent = markdown ? '保留在线图片' : '标记图片位置';
-  if (!markdown && downloadRadio.checked) {
+  if (!markdown && !epub && downloadRadio.checked) {
     document.querySelector('input[name="images"][value="remote"]').checked = true;
   }
 }
@@ -67,12 +69,16 @@ window.addEventListener('beforeunload', () => {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   errorBox.hidden = true;
-  const rawUrl = urlField.value.trim();
+  const urls = urlField.value.split(/\r?\n/).map(url => url.trim()).filter(Boolean);
   const formats = [...document.querySelectorAll('input[name="format"]:checked')].map(input => input.value);
   const images = document.querySelector('input[name="images"]:checked').value;
-  if (!rawUrl) {
+  if (!urls.length) {
     showError('请先粘贴分享链接。');
     urlField.focus();
+    return;
+  }
+  if (urls.length > maxBatchStories) {
+    showError(`一次最多处理 ${maxBatchStories} 篇故事。`);
     return;
   }
   if (!formats.length) {
@@ -82,19 +88,21 @@ form.addEventListener('submit', async event => {
 
   exportButton.disabled = true;
   buttonText.textContent = '正在导出…';
+  const isBatch = urls.length > 1;
   const hadResult = !resultPanel.hidden;
   preview.classList.add('is-loading');
   preview.classList.remove('has-result');
   previewEmpty.hidden = true;
   resultPanel.hidden = true;
   loading.hidden = false;
+  loading.querySelector('strong').textContent = isBatch ? `正在整理 ${urls.length} 篇…` : '正在整理…';
   mobileLoader.hidden = false;
-  statusLine.textContent = '正在导出故事。';
+  statusLine.textContent = isBatch ? `正在导出 ${urls.length} 篇故事。` : '正在导出故事。';
   try {
-    const response = await fetch('/api/export', {
+    const response = await fetch(isBatch ? '/api/export-batch' : '/api/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Local-Token': token },
-      body: JSON.stringify({ url: rawUrl, formats, images }),
+      body: JSON.stringify(isBatch ? { urls, formats, images } : { url: urls[0], formats, images }),
       cache: 'no-store',
     });
     if (!response.ok) {
@@ -106,6 +114,7 @@ form.addEventListener('submit', async event => {
     const name = decodeURIComponent(response.headers.get('X-Download-Name') || 'short-story.zip');
     const title = decodeURIComponent(response.headers.get('X-Story-Title') || '导出完成');
     const author = decodeURIComponent(response.headers.get('X-Story-Author') || '');
+    const failures = Number(response.headers.get('X-Export-Failures') || 0);
     if (lastDownload) URL.revokeObjectURL(lastDownload.href);
     lastDownload = { href: URL.createObjectURL(blob), name };
     downloadAgain();
@@ -115,8 +124,10 @@ form.addEventListener('submit', async event => {
     coverTitle.classList.add('is-real');
     document.getElementById('book-author').textContent = author || '已保存到本地';
     document.getElementById('result-title').textContent = title;
-    const type = name.endsWith('.zip') ? 'ZIP' : name.endsWith('.md') ? 'Markdown' : 'TXT';
-    document.getElementById('result-meta').textContent = `${type} 文件已生成`;
+    const type = name.endsWith('.zip') ? 'ZIP' : name.endsWith('.epub') ? 'EPUB' : name.endsWith('.md') ? 'Markdown' : 'TXT';
+    document.getElementById('result-meta').textContent = failures
+      ? `${failures} 篇未完成 · 详见 ZIP 内报告`
+      : `${type} 文件已生成`;
     resultPanel.hidden = false;
     preview.classList.add('has-result');
     statusLine.textContent = '文件已生成，下载已开始。';

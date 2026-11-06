@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-6C7C59)](LICENSE)
 
-**番茄短篇下载器**：将你有权访问的番茄小说短故事分享页内容保存为 UTF-8 TXT 或 Markdown。无需登录账号；粘贴链接、选择格式、点击下载。支持本机浏览器界面和命令行。
+**番茄短篇下载器**：将你有权访问的番茄小说短故事分享页内容保存为 TXT、Markdown 或 EPUB。无需登录账号；粘贴链接、选择格式、点击下载。支持本机浏览器界面和命令行。
 
 ![Fanqie Short Story Exporter 项目封面](docs/images/cover.png)
 
@@ -12,7 +12,7 @@
 
 ### Windows：下载免安装版
 
-1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.2.1/FanqieShortStoryExporter-0.2.1-Windows.zip) 并解压。
+1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.3.0/FanqieShortStoryExporter-0.3.0-Windows.zip) 并解压。
 2. 双击 `FanqieShortStoryExporter.exe`。程序会自动在浏览器中打开本机界面，无需另装 Python。
 3. 用完后点击界面右上角的「退出」。当前 EXE 未做代码签名，运行前请核对下载来源。
 
@@ -31,15 +31,15 @@ fanqie-short-story-ui
 
 ## 界面预览
 
-![桌面界面示例：同时选择 TXT 与 Markdown 导出](docs/images/desktop.png)
+![桌面界面示例：选择 TXT、Markdown 或 EPUB](docs/images/desktop.png)
 
 ## 使用教程
 
-1. 复制一条番茄短故事分享链接，页面地址应以 `https://changdunovel.com/ug/pages/short-story-share` 开头。将完整链接粘贴到「短故事分享链接」输入框。
-2. 选择 TXT、Markdown 或两者；再选择正文图片的处理方式。界面默认只选 TXT。
-3. 点击「下载故事」。文件由浏览器保存到你的下载目录：只选一种文本格式时直接下载该文件；同时选两种格式或选择「下载图片」时下载 ZIP。
+1. 粘贴短故事分享链接：`/t/.../` 短链接或完整分享页链接都可以；多篇时每行一条，最多 10 条。
+2. 选择 TXT、Markdown、EPUB 和正文图片处理方式。界面默认只选 TXT。
+3. 点击「下载故事」。单篇单格式直接下载；多格式或多篇下载 ZIP。部分作品失败时，ZIP 中会有 `export-report.txt`。
 
-TXT 无法嵌入图片，会标记图片在正文中的位置。若只选择 TXT，「下载图片」不可选。在线图片地址可能过期；需要离线阅读图片时，请选择 Markdown 和「下载图片」（界面最多支持 12 张正文图片）。下载完成后可点「再次下载」，结束使用时点右上角「退出」。
+TXT 会标记图片位置；Markdown 可保留在线图片地址。EPUB 默认也标记图片位置，选择「下载图片」后会内嵌图片。浏览器界面每篇最多下载 12 张正文图片。下载完成后可点「再次下载」，结束使用时点右上角「退出」。
 
 ## 命令行
 
@@ -57,14 +57,17 @@ fanqie-short-story - -o downloads -f txt
 
 # 保存 Markdown，并下载正文图片
 fanqie-short-story - -o downloads -f md --images download
+
+# 保存 EPUB，并内嵌正文图片
+fanqie-short-story - -o downloads -f epub --images download
 ```
 
-图片选项为 `remote`（默认，保留在线地址）、`download`（下载到本地）和 `skip`（不保留图片）。已有同名文件时，命令行会停止；确认覆盖时可加 `--force`。完整参数可运行 `fanqie-short-story --help` 查看。
+图片选项为 `remote`（默认）、`download`（下载图片）和 `skip`（不保留图片）。已有同名文件时，命令行会停止；确认覆盖时可加 `--force`。完整参数可运行 `fanqie-short-story --help` 查看。
 
 ## 使用范围与注意事项
 
-- 一次处理一条 `changdunovel.com` 短故事分享链接。下载时将请求中的 `percent` 设为 `100`；仅导出站点实际返回的内容，不保证每条链接都是全文。
-- 无需登录或提供账号密码，不读取浏览器 Cookie，也不提供批量发现功能。
+- 浏览器可顺序处理最多 10 条手动粘贴的 `changdunovel.com` 短故事链接；命令行每次处理一条。下载时将请求中的 `percent` 设为 `100`；仅导出站点实际返回的内容，不保证每条链接都是全文。
+- 无需登录或提供账号密码，不读取浏览器 Cookie，也不提供自动发现作品功能。
 - 程序不会主动记录分享链接，导出文件也不包含原链接。粘贴时输入框会显示完整链接，请勿在截图中公开个人或设备标识。
 
 ## 免责声明

@@ -10,12 +10,13 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from fanqie_short_story.client import Story
+from fanqie_short_story.client import DownloadError, Story
 from fanqie_short_story.cli import main as cli_main
-from fanqie_short_story.web import LocalServer, prepare_export
+from fanqie_short_story.web import LocalServer, prepare_batch_export, prepare_export
 
 
 LINK = (
@@ -26,6 +27,16 @@ LINK = (
 )
 HTML = '<p>开头。</p><p><img src="https://p3-reading-sign.fqnovelpic.com/image.jpg"></p><p>结尾。</p>'
 STORY = Story("示例故事", "作者", "123456", "789", HTML, "开头。结尾。")
+SECOND_LINK = LINK.replace("post_id=123456", "post_id=654321")
+SECOND_STORY = Story("第二篇", "作者二", "654321", "987", "<p>第二篇正文。</p>", "第二篇正文。")
+
+
+def fake_images(_blocks, output_dir, stem, *, timeout):
+    relative = f"{stem}_assets/image-001.jpg"
+    target = output_dir / relative
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"image-bytes")
+    return {1: relative}
 
 
 class PrepareExportTests(unittest.TestCase):
@@ -38,13 +49,6 @@ class PrepareExportTests(unittest.TestCase):
         self.assertNotIn(b"private-token", result.data)
 
     def test_two_formats_and_offline_image_form_zip(self):
-        def fake_images(_blocks, output_dir, stem, *, timeout):
-            relative = f"{stem}_assets/image-001.jpg"
-            target = output_dir / relative
-            target.parent.mkdir(parents=True)
-            target.write_bytes(b"image-bytes")
-            return {1: relative}
-
         with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
             with patch("fanqie_short_story.exporter.download_images", side_effect=fake_images):
                 result = prepare_export(LINK, ["txt", "md"], "download")
@@ -65,13 +69,6 @@ class PrepareExportTests(unittest.TestCase):
             fetch.assert_not_called()
 
     def test_web_and_cli_export_identical_files_with_offline_image(self):
-        def fake_images(_blocks, output_dir, stem, *, timeout):
-            relative = f"{stem}_assets/image-001.jpg"
-            target = output_dir / relative
-            target.parent.mkdir(parents=True)
-            target.write_bytes(b"image-bytes")
-            return {1: relative}
-
         with tempfile.TemporaryDirectory() as directory:
             with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
                 with patch("fanqie_short_story.exporter.download_images", side_effect=fake_images):
@@ -85,6 +82,70 @@ class PrepareExportTests(unittest.TestCase):
                 self.assertEqual(len(bundle.namelist()), 3)
                 for filename in bundle.namelist():
                     self.assertEqual(bundle.read(filename), (Path(directory) / filename).read_bytes())
+
+    def test_epub_is_direct_download_with_valid_package_and_no_remote_image(self):
+        story = Story("示例 & 故事", "作者", "123456", "789", HTML, "开头。结尾。")
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=story):
+            result = prepare_export(LINK, ["epub"], "remote")
+        self.assertEqual(result.content_type, "application/epub+zip")
+        self.assertTrue(result.name.endswith(".epub"))
+        with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
+            self.assertEqual(bundle.namelist()[0], "mimetype")
+            self.assertEqual(bundle.getinfo("mimetype").compress_type, zipfile.ZIP_STORED)
+            self.assertEqual(bundle.read("mimetype"), b"application/epub+zip")
+            package = ET.fromstring(bundle.read("OEBPS/content.opf"))
+            chapter = ET.fromstring(bundle.read("OEBPS/chapter.xhtml"))
+            ET.fromstring(bundle.read("OEBPS/nav.xhtml"))
+            self.assertEqual(chapter.find(".//{http://www.w3.org/1999/xhtml}h1").text, story.title)
+            self.assertIsNotNone(package.find(".//{http://www.idpf.org/2007/opf}spine"))
+            self.assertIn("[插图 1]", bundle.read("OEBPS/chapter.xhtml").decode("utf-8"))
+            self.assertNotIn(b"private-token", result.data)
+            self.assertNotIn(b"https://p3-reading-sign", result.data)
+
+    def test_epub_embeds_downloaded_image_without_separate_assets(self):
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
+            with patch("fanqie_short_story.exporter.download_images", side_effect=fake_images):
+                result = prepare_export(LINK, ["epub"], "download")
+        self.assertTrue(result.name.endswith(".epub"))
+        with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
+            self.assertEqual(bundle.read("OEBPS/images/image-001.jpg"), b"image-bytes")
+            self.assertIn(b'images/image-001.jpg', bundle.read("OEBPS/chapter.xhtml"))
+            self.assertIn(b'image/jpeg', bundle.read("OEBPS/content.opf"))
+
+    def test_batch_exports_two_stories_into_one_zip(self):
+        with patch("fanqie_short_story.exporter.fetch_story", side_effect=[STORY, SECOND_STORY]):
+            result = prepare_batch_export([LINK, SECOND_LINK], ["txt", "epub"], "skip")
+        self.assertEqual(result.content_type, "application/zip")
+        self.assertEqual(result.failures, 0)
+        with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
+            names = bundle.namelist()
+            self.assertEqual(sum(name.endswith(".txt") for name in names), 2)
+            self.assertEqual(sum(name.endswith(".epub") for name in names), 2)
+            self.assertNotIn("export-report.txt", names)
+
+    def test_batch_reports_failure_by_position_without_link(self):
+        with patch("fanqie_short_story.exporter.fetch_story", side_effect=[STORY, DownloadError("站点未返回正文")]):
+            result = prepare_batch_export([LINK, SECOND_LINK], ["txt"], "remote")
+        self.assertEqual(result.failures, 1)
+        with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
+            report = bundle.read("export-report.txt").decode("utf-8")
+            self.assertEqual(sum(name.endswith(".txt") for name in bundle.namelist()), 2)
+            self.assertIn("第 2 条", report)
+            self.assertNotIn("private-token", report)
+            self.assertNotIn("post_id=", report)
+
+    def test_batch_skips_duplicate_link_without_refetching(self):
+        with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY) as fetch:
+            result = prepare_batch_export([LINK, LINK], ["txt"], "remote")
+        self.assertEqual(fetch.call_count, 1)
+        with zipfile.ZipFile(io.BytesIO(result.data)) as bundle:
+            self.assertIn("重复链接", bundle.read("export-report.txt").decode("utf-8"))
+
+    def test_batch_rejects_too_many_links_before_fetch(self):
+        with patch("fanqie_short_story.exporter.fetch_story") as fetch:
+            with self.assertRaises(ValueError):
+                prepare_batch_export([LINK] * 11, ["txt"], "remote")
+            fetch.assert_not_called()
 
 
 class LocalServerTests(unittest.TestCase):
@@ -104,21 +165,26 @@ class LocalServerTests(unittest.TestCase):
             self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertIn(self.server.token, html)
         self.assertIn("仅供学习与技术研究", html)
+        self.assertIn('value="epub"', html)
 
-        request = Request(
-            self.server.origin + "/api/export",
-            data=json.dumps({"url": LINK, "formats": ["txt"], "images": "remote"}).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Origin": "https://example.com",
-                "X-Local-Token": self.server.token,
-            },
-            method="POST",
-        )
         with patch("fanqie_short_story.exporter.fetch_story") as fetch:
-            with self.assertRaises(HTTPError) as error:
-                urlopen(request, timeout=5)
-            self.assertEqual(error.exception.code, 403)
+            for path, data in (
+                ("/api/export", {"url": LINK, "formats": ["txt"], "images": "remote"}),
+                ("/api/export-batch", {"urls": [LINK, SECOND_LINK], "formats": ["txt"], "images": "remote"}),
+            ):
+                request = Request(
+                    self.server.origin + path,
+                    data=json.dumps(data).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "Origin": "https://example.com",
+                        "X-Local-Token": self.server.token,
+                    },
+                    method="POST",
+                )
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(request, timeout=5)
+                self.assertEqual(error.exception.code, 403)
             fetch.assert_not_called()
 
     def test_same_origin_request_downloads_without_echoing_private_url(self):
@@ -140,6 +206,27 @@ class LocalServerTests(unittest.TestCase):
         self.assertIn("开头。", content.decode("utf-8"))
         self.assertNotIn("private-token", headers)
         self.assertNotIn(b"private-token", content)
+
+    def test_same_origin_batch_request_returns_zip(self):
+        request = Request(
+            self.server.origin + "/api/export-batch",
+            data=json.dumps({"urls": [LINK, SECOND_LINK], "formats": ["txt"], "images": "skip"}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": self.server.origin,
+                "X-Local-Token": self.server.token,
+            },
+            method="POST",
+        )
+        with patch("fanqie_short_story.exporter.fetch_story", side_effect=[STORY, SECOND_STORY]):
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get_content_type(), "application/zip")
+                self.assertEqual(response.headers.get("X-Export-Failures"), "0")
+                data = response.read()
+        with zipfile.ZipFile(io.BytesIO(data)) as bundle:
+            self.assertEqual(len(bundle.namelist()), 2)
+        self.assertNotIn(b"private-token", data)
 
     def test_shutdown_requires_same_origin_and_token(self):
         rejected = Request(

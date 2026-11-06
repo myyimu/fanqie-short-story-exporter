@@ -22,6 +22,9 @@ from .exporter import load_export, render_export
 
 MAX_REQUEST_BYTES = 32 * 1024
 MAX_OFFLINE_IMAGES = 12
+MAX_BATCH_STORIES = 10
+MAX_BATCH_REQUEST_BYTES = 192 * 1024
+MAX_BATCH_OUTPUT_BYTES = 64 * 1024 * 1024
 STATIC_TYPES = {
     "/app.css": "text/css; charset=utf-8",
     "/app.js": "text/javascript; charset=utf-8",
@@ -36,6 +39,7 @@ class ExportResult:
     title: str
     author: str
     characters: int
+    failures: int = 0
 
 
 def prepare_export(raw_url: object, formats: object, images: object) -> ExportResult:
@@ -45,7 +49,9 @@ def prepare_export(raw_url: object, formats: object, images: object) -> ExportRe
         if len(exported.text) == 1 and not exported.images:
             name, data = next(iter(exported.text.items()))
             content_type = (
-                "text/markdown; charset=utf-8" if name.endswith(".md") else "text/plain; charset=utf-8"
+                "application/epub+zip" if name.endswith(".epub")
+                else "text/markdown; charset=utf-8" if name.endswith(".md")
+                else "text/plain; charset=utf-8"
             )
         else:
             name = f"{job.stem}.zip"
@@ -60,6 +66,67 @@ def prepare_export(raw_url: object, formats: object, images: object) -> ExportRe
 
     return ExportResult(
         name, content_type, data, job.story.title, job.story.author, job.characters
+    )
+
+
+def prepare_batch_export(raw_urls: object, formats: object, images: object) -> ExportResult:
+    """Export a small, sequential user-supplied queue as one ZIP."""
+    if (
+        not isinstance(raw_urls, list)
+        or not 2 <= len(raw_urls) <= MAX_BATCH_STORIES
+        or not all(isinstance(url, str) and url.strip() for url in raw_urls)
+    ):
+        raise ValueError(f"请粘贴 2–{MAX_BATCH_STORIES} 条短故事链接，每行一条")
+
+    buffer = io.BytesIO()
+    failures: list[str] = []
+    seen_urls: set[str] = set()
+    seen_stems: set[str] = set()
+    total_bytes = 0
+    total_characters = 0
+    success_count = 0
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        for index, raw_url in enumerate(raw_urls, 1):
+            try:
+                if raw_url.strip() in seen_urls:
+                    failures.append(f"第 {index} 条：重复链接")
+                    continue
+                seen_urls.add(raw_url.strip())
+                job = load_export(raw_url, formats, images)
+                if job.stem in seen_stems:
+                    failures.append(f"第 {index} 条：重复作品")
+                    continue
+                with render_export(job, max_images=MAX_OFFLINE_IMAGES) as exported:
+                    size = sum(len(content) for content in exported.text.values())
+                    size += sum(source.stat().st_size for source in exported.images.values())
+                    if total_bytes + size > MAX_BATCH_OUTPUT_BYTES:
+                        failures.append(f"第 {index} 条：批量文件超过大小限制")
+                        continue
+                    for filename, content in exported.text.items():
+                        bundle.writestr(filename, content)
+                    for relative_path, source in exported.images.items():
+                        bundle.write(source, arcname=relative_path)
+                    total_bytes += size
+                seen_stems.add(job.stem)
+                total_characters += job.characters
+                success_count += 1
+            except (ValueError, DownloadError) as error:
+                failures.append(f"第 {index} 条：{error}")
+        if not success_count:
+            detail = failures[0] if failures else "没有可导出的故事"
+            raise DownloadError(f"没有成功导出的故事：{detail}")
+        if failures:
+            report = f"成功 {success_count} 篇，未完成 {len(failures)} 篇\n\n" + "\n".join(failures) + "\n"
+            bundle.writestr("export-report.txt", report.encode("utf-8"))
+
+    return ExportResult(
+        f"Fanqie-Short-Stories-{success_count}.zip",
+        "application/zip",
+        buffer.getvalue(),
+        f"已导出 {success_count} 篇故事",
+        "",
+        total_characters,
+        len(failures),
     )
 
 
@@ -126,7 +193,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             self._error(404, "页面不存在")
 
     def do_POST(self) -> None:
-        if self.path not in {"/api/export", "/api/shutdown"}:
+        if self.path not in {"/api/export", "/api/export-batch", "/api/shutdown"}:
             self._error(404, "接口不存在")
             return
         if (
@@ -148,16 +215,22 @@ class LocalHandler(BaseHTTPRequestHandler):
         except ValueError:
             self._error(400, "请求长度无效")
             return
-        if size <= 0 or size > MAX_REQUEST_BYTES:
+        max_size = MAX_BATCH_REQUEST_BYTES if self.path == "/api/export-batch" else MAX_REQUEST_BYTES
+        if size <= 0 or size > max_size:
             self._error(413, "链接过长")
             return
         try:
             request = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(request, dict):
                 raise ValueError("请求格式无效")
-            result = prepare_export(
-                request.get("url"), request.get("formats"), request.get("images")
-            )
+            if self.path == "/api/export-batch":
+                result = prepare_batch_export(
+                    request.get("urls"), request.get("formats"), request.get("images")
+                )
+            else:
+                result = prepare_export(
+                    request.get("url"), request.get("formats"), request.get("images")
+                )
         except (UnicodeError, json.JSONDecodeError):
             self._error(400, "请求格式无效")
             return
@@ -177,6 +250,7 @@ class LocalHandler(BaseHTTPRequestHandler):
             X_Story_Title=quote(result.title[:120]),
             X_Story_Author=quote(result.author[:120]),
             X_Story_Characters=str(result.characters),
+            X_Export_Failures=str(result.failures),
         )
 
 

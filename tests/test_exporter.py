@@ -3,6 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from urllib.error import HTTPError
@@ -191,6 +192,17 @@ class RenderTests(unittest.TestCase):
                         code = main([SHORT_LINK, "--output-dir", directory, "-f", "txt"])
             self.assertEqual(code, 0)
             self.assertEqual(len(list(Path(directory).glob("*.txt"))), 1)
+
+    def test_cli_writes_epub(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("fanqie_short_story.exporter.fetch_story", return_value=self.story):
+                with redirect_stdout(io.StringIO()):
+                    code = main([LINK, "--output-dir", directory, "-f", "epub"])
+            self.assertEqual(code, 0)
+            exported = list(Path(directory).glob("*.epub"))
+            self.assertEqual(len(exported), 1)
+            with zipfile.ZipFile(exported[0]) as book:
+                self.assertIn("OEBPS/chapter.xhtml", book.namelist())
 
 
 if __name__ == "__main__":

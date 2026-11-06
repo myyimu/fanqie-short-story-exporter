@@ -15,12 +15,12 @@ from .exporter import load_export, render_export, safe_stem
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="fanqie-short-story",
-        description="将番茄短故事分享链接当前返回的正文导出为 TXT、Markdown。",
+        description="将番茄短故事分享链接当前返回的正文导出为 TXT、Markdown 或 EPUB。",
     )
     parser.add_argument("url", help="短故事分享链接；用 - 从标准输入读取")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path.cwd(), help="保存目录")
-    parser.add_argument("-f", "--format", action="append", choices=("txt", "md"), help="输出格式，可重复；默认两种")
-    parser.add_argument("--images", choices=("remote", "download", "skip"), default="remote", help="Markdown 插图处理方式")
+    parser.add_argument("-f", "--format", action="append", choices=("txt", "md", "epub"), help="输出格式，可重复；默认 TXT 和 Markdown")
+    parser.add_argument("--images", choices=("remote", "download", "skip"), default="remote", help="Markdown/EPUB 插图处理方式")
     parser.add_argument("--timeout", type=float, default=20, help="单次请求超时秒数")
     parser.add_argument("--force", action="store_true", help="覆盖同名文件")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

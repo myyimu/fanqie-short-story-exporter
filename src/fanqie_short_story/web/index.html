@@ -22,17 +22,18 @@
       <section class="editor">
         <div class="eyebrow" aria-hidden="true"><span></span><i>✦</i></div>
         <h1>喜欢的故事，<br><em>值得好好保存。</em></h1>
-        <p class="intro">粘贴链接，下载 TXT 或 Markdown。</p>
+        <p class="intro">粘贴链接，下载 TXT、Markdown 或 EPUB。</p>
 
         <form id="export-form" novalidate>
           <label class="field-label" for="story-url">短故事分享链接</label>
-          <div class="url-wrap"><span aria-hidden="true">↗</span><textarea id="story-url" name="url" rows="3" spellcheck="false" autocomplete="off" placeholder="粘贴短故事分享链接"></textarea></div>
+          <div class="url-wrap"><span aria-hidden="true">↗</span><textarea id="story-url" name="url" rows="3" spellcheck="false" autocomplete="off" placeholder="粘贴短故事链接；多篇一行一条"></textarea></div>
 
           <fieldset class="choice-group">
             <legend>保存格式</legend>
             <div class="formats">
               <label><input type="checkbox" name="format" value="txt" checked><span class="format-card"><b class="file-icon">T</b><strong>TXT</strong><i aria-hidden="true">✓</i></span></label>
               <label><input type="checkbox" name="format" value="md"><span class="format-card"><b class="file-icon md-icon">M</b><strong>Markdown</strong><i aria-hidden="true">✓</i></span></label>
+              <label><input type="checkbox" name="format" value="epub"><span class="format-card"><b class="file-icon epub-icon">E</b><strong>EPUB</strong><i aria-hidden="true">✓</i></span></label>
             </div>
           </fieldset>
 
