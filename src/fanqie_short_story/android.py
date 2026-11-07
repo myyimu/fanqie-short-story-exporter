@@ -11,11 +11,12 @@ from .web import MAX_BATCH_REQUEST_BYTES, MAX_BATCH_STORIES, prepare_batch_expor
 
 def prepare_android_export(
     share_text: str, formats_csv: str, images: str, cache_path: str
-) -> tuple[str, str, str, int, int]:
+) -> tuple[str, str, str, int, int, str, str]:
     """Export pasted text into an app-owned cache file for Android's file picker.
 
     The return tuple is (status, name_or_message, MIME type, character count,
-    failed story count). Keeping file bytes in Python avoids an extra Java copy.
+    failed story count, title, author). Keeping file bytes in Python avoids an
+    extra Java copy.
     """
     try:
         if not isinstance(share_text, str) or len(share_text.encode("utf-8")) > MAX_BATCH_REQUEST_BYTES:
@@ -32,10 +33,13 @@ def prepare_android_export(
         else:
             result = prepare_batch_export(urls, formats, images)
         Path(cache_path).write_bytes(result.data)
-        return ("ok", result.name, result.content_type, result.characters, result.failures)
+        return (
+            "ok", result.name, result.content_type, result.characters,
+            result.failures, result.title, result.author,
+        )
     except (ValueError, DownloadError) as error:
-        return ("error", str(error), "", 0, 0)
+        return ("error", str(error), "", 0, 0, "", "")
     except OSError:
-        return ("error", "生成文件时出错", "", 0, 0)
+        return ("error", "生成文件时出错", "", 0, 0, "", "")
     except Exception:
-        return ("error", "导出失败，请稍后重试", "", 0, 0)
+        return ("error", "导出失败，请稍后重试", "", 0, 0, "", "")

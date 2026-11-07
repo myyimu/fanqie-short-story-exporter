@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="light">
   <meta name="local-token" content="__LOCAL_TOKEN__">
   <title>Fanqie Short Story Exporter</title>
-  <link rel="stylesheet" href="/app.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
 </head>
 <body>
   <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -60,7 +60,8 @@
           <div class="book-shadow" aria-hidden="true"></div>
           <div class="book-cover">
             <span class="book-spine" aria-hidden="true"></span>
-            <span class="book-page" aria-hidden="true"></span>
+          <span class="book-underpage" aria-hidden="true"></span>
+          <span class="book-page" aria-hidden="true"></span>
             <div class="book-inner">
               <div class="book-top"><span class="book-sun" aria-hidden="true"></span><span>SHORT STORY<br>COLLECTION</span></div>
               <div class="book-title" id="book-title">下一篇<br>值得收藏<br>的故事</div>
@@ -71,7 +72,7 @@
         </div>
         <div class="preview-foot" id="preview-empty"><strong>准备好了</strong></div>
         <div class="preview-foot" id="loading" hidden><strong>正在整理…</strong></div>
-        <div class="preview-foot result" id="result-panel" hidden><div><strong id="result-title">导出完成</strong><span id="result-meta"></span></div><button type="button" id="again-button">再次下载 ↓</button></div>
+        <div class="preview-foot result" id="result-panel" hidden><div><strong id="result-title">导出完成</strong><span id="result-meta"></span></div><div class="result-actions"><button type="button" id="again-button">再次下载 ↓</button><button type="button" id="open-folder-button" hidden>打开保存位置 ↗</button></div></div>
       </aside>
     </main>
     <div class="exit-state" id="exit-state" hidden><strong>已退出</strong><span>可以关闭页面。</span></div>

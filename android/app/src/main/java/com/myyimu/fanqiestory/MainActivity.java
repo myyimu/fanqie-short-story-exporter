@@ -5,17 +5,23 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.EditText;
-import android.widget.RadioButton;
-import android.widget.TextView;
+import android.provider.DocumentsContract;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import androidx.webkit.WebViewAssetLoader;
 
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -27,52 +33,71 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int CREATE_DOCUMENT_REQUEST = 1001;
-    private static final String PENDING_PATH = "pending_path";
-    private static final String PENDING_NAME = "pending_name";
-    private static final String PENDING_MIME = "pending_mime";
+    private static final String ASSET_HOST = "appassets.androidplatform.net";
+    private static final String APP_URL = "https://" + ASSET_HOST + "/assets/index.html";
+    private static final String LAST_SAVE_URI = "last_save_uri";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private EditText storyInput;
-    private CheckBox formatTxt;
-    private CheckBox formatMd;
-    private CheckBox formatEpub;
-    private RadioButton imagesRemote;
-    private RadioButton imagesDownload;
-    private RadioButton imagesSkip;
-    private Button exportButton;
-    private TextView statusText;
+    private WebView webView;
+    private boolean pageReady;
+    private String sharedText;
     private File pendingFile;
     private String pendingName;
     private String pendingMime;
+    private Uri lastSaveUri;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        setContentView(R.layout.activity_main);
-
-        storyInput = findViewById(R.id.story_input);
-        formatTxt = findViewById(R.id.format_txt);
-        formatMd = findViewById(R.id.format_md);
-        formatEpub = findViewById(R.id.format_epub);
-        imagesRemote = findViewById(R.id.images_remote);
-        imagesDownload = findViewById(R.id.images_download);
-        imagesSkip = findViewById(R.id.images_skip);
-        exportButton = findViewById(R.id.export_button);
-        statusText = findViewById(R.id.status_text);
-
-        View.OnClickListener updateImages = view -> updateImageChoices();
-        formatTxt.setOnClickListener(updateImages);
-        formatMd.setOnClickListener(updateImages);
-        formatEpub.setOnClickListener(updateImages);
-        updateImageChoices();
-        exportButton.setOnClickListener(view -> startExport());
-
-        if (state != null && state.getString(PENDING_PATH) != null) {
-            pendingFile = new File(state.getString(PENDING_PATH));
-            pendingName = state.getString(PENDING_NAME);
-            pendingMime = state.getString(PENDING_MIME);
+        String savedUri = getPreferences(MODE_PRIVATE).getString(LAST_SAVE_URI, null);
+        if (savedUri != null) lastSaveUri = Uri.parse(savedUri);
+        if (state != null && state.getString("pending_path") != null) {
+            pendingFile = new File(state.getString("pending_path"));
+            pendingName = state.getString("pending_name");
+            pendingMime = state.getString("pending_mime");
         }
+
+        WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+            .build();
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(245, 240, 231));
+        webView.setFitsSystemWindows(true);
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setAllowFileAccess(false);
+        webView.getSettings().setAllowContentAccess(false);
+        webView.getSettings().setAllowFileAccessFromFileURLs(false);
+        webView.getSettings().setAllowUniversalAccessFromFileURLs(false);
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if ("https".equals(uri.getScheme()) && ASSET_HOST.equals(uri.getHost())) {
+                    WebResourceResponse response = assets.shouldInterceptRequest(uri);
+                    if (response != null) return response;
+                }
+                return new WebResourceResponse(
+                    "text/plain", "UTF-8", new ByteArrayInputStream(new byte[0])
+                );
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return !APP_URL.equals(request.getUrl().toString());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (APP_URL.equals(url)) {
+                    pageReady = true;
+                    deliverSharedText();
+                }
+            }
+        });
+        webView.addJavascriptInterface(new AndroidBridge(), "AndroidExporter");
+        setContentView(webView);
         acceptSharedText(getIntent());
+        webView.loadUrl(APP_URL);
     }
 
     @Override
@@ -84,83 +109,92 @@ public class MainActivity extends Activity {
 
     private void acceptSharedText(Intent intent) {
         if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
-            CharSequence shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-            if (shared != null) {
-                storyInput.setText(shared);
-                storyInput.setSelection(storyInput.length());
+            CharSequence incoming = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            if (incoming != null) {
+                sharedText = incoming.toString();
+                deliverSharedText();
             }
         }
     }
 
-    private void updateImageChoices() {
-        boolean canDownload = formatMd.isChecked() || formatEpub.isChecked();
-        imagesDownload.setEnabled(canDownload);
-        if (!canDownload && imagesDownload.isChecked()) {
-            imagesRemote.setChecked(true);
+    private void deliverSharedText() {
+        if (pageReady && sharedText != null) {
+            webView.evaluateJavascript(
+                "window.setAndroidShareText(" + JSONObject.quote(sharedText) + ")", null
+            );
+            sharedText = null;
         }
     }
 
-    private String selectedFormats() {
-        StringBuilder formats = new StringBuilder();
-        if (formatTxt.isChecked()) formats.append("txt");
-        if (formatMd.isChecked()) formats.append(formats.length() == 0 ? "md" : ",md");
-        if (formatEpub.isChecked()) formats.append(formats.length() == 0 ? "epub" : ",epub");
-        return formats.toString();
+    private void sendEvent(String event, String json) {
+        if (pageReady) webView.evaluateJavascript("window." + event + "(" + json + ")", null);
     }
 
-    private void startExport() {
-        String shareText = storyInput.getText().toString();
-        String formats = selectedFormats();
-        if (shareText.trim().isEmpty()) {
-            showError("请先粘贴短故事分享文案或链接");
-            storyInput.requestFocus();
-            return;
+    private void sendExportError(String message) {
+        sendEvent("onAndroidExportResult", "{\"status\":\"error\",\"message\":"
+            + JSONObject.quote(message) + "}");
+    }
+
+    private final class AndroidBridge {
+        @JavascriptInterface
+        public void startExport(String shareText, String formats, String images) {
+            worker.execute(() -> prepareExport(shareText, formats, images));
         }
-        if (formats.isEmpty()) {
-            showError("请至少选择一种保存格式");
+
+        @JavascriptInterface
+        public void savePrepared() {
+            runOnUiThread(() -> {
+                if (pendingFile != null && pendingFile.isFile()) openSavePicker();
+                else sendEvent("onAndroidSaveResult", "{\"status\":\"error\",\"message\":\"文件已失效，请重新导出\"}");
+            });
+        }
+
+        @JavascriptInterface
+        public void openSavedLocation() {
+            runOnUiThread(() -> openSavedLocationPicker());
+        }
+    }
+
+    private void prepareExport(String shareText, String formats, String images) {
+        File output;
+        try {
+            output = File.createTempFile("fanqie-export-", ".tmp", getCacheDir());
+        } catch (IOException error) {
+            runOnUiThread(() -> sendExportError("无法准备保存文件"));
             return;
         }
 
-        String images = imagesDownload.isChecked() ? "download" : imagesSkip.isChecked() ? "skip" : "remote";
-        exportButton.setEnabled(false);
-        showStatus("正在整理故事…");
-        worker.execute(() -> {
-            File cacheFile;
-            try {
-                cacheFile = File.createTempFile("fanqie-export-", ".tmp", getCacheDir());
-            } catch (IOException error) {
-                runOnUiThread(() -> finishWithError("无法准备保存文件"));
+        try {
+            PyObject response = Python.getInstance()
+                .getModule("fanqie_short_story.android")
+                .callAttr("prepare_android_export", shareText, formats, images, output.getAbsolutePath());
+            List<PyObject> values = response.asList();
+            if (!"ok".equals(values.get(0).toString())) {
+                output.delete();
+                String message = values.get(1).toString();
+                runOnUiThread(() -> sendExportError(message));
                 return;
             }
 
-            try {
-                PyObject response = Python.getInstance()
-                    .getModule("fanqie_short_story.android")
-                    .callAttr("prepare_android_export", shareText, formats, images, cacheFile.getAbsolutePath());
-                List<PyObject> values = response.asList();
-                if (!"ok".equals(values.get(0).toString())) {
-                    cacheFile.delete();
-                    String message = values.get(1).toString();
-                    runOnUiThread(() -> finishWithError(message));
-                    return;
-                }
-
-                String fileName = values.get(1).toString();
-                String mimeType = values.get(2).toString().split(";", 2)[0];
-                int failures = values.get(4).toInt();
-                runOnUiThread(() -> {
-                    pendingFile = cacheFile;
-                    pendingName = fileName;
-                    pendingMime = mimeType;
-                    showStatus(failures == 0 ? "文件已生成，请选择保存位置。"
-                        : "文件已生成；部分故事未完成，详情见 ZIP 内报告。请选择保存位置。");
-                    openSavePicker();
-                });
-            } catch (Exception error) {
-                cacheFile.delete();
-                runOnUiThread(() -> finishWithError("导出失败，请稍后重试"));
-            }
-        });
+            String name = values.get(1).toString();
+            String mime = values.get(2).toString().split(";", 2)[0];
+            int failures = values.get(4).toInt();
+            String title = values.get(5).toString();
+            String author = values.get(6).toString();
+            runOnUiThread(() -> {
+                if (pendingFile != null) pendingFile.delete();
+                pendingFile = output;
+                pendingName = name;
+                pendingMime = mime;
+                sendEvent("onAndroidExportResult", "{\"status\":\"ok\",\"name\":"
+                    + JSONObject.quote(name) + ",\"title\":" + JSONObject.quote(title)
+                    + ",\"author\":" + JSONObject.quote(author)
+                    + ",\"failures\":" + failures + "}");
+            });
+        } catch (Exception error) {
+            output.delete();
+            runOnUiThread(() -> sendExportError("导出失败，请稍后重试"));
+        }
     }
 
     private void openSavePicker() {
@@ -168,11 +202,28 @@ public class MainActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(pendingMime);
         intent.putExtra(Intent.EXTRA_TITLE, pendingName);
+        if (lastSaveUri != null && Build.VERSION.SDK_INT >= 26) {
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, lastSaveUri);
+        }
         try {
             startActivityForResult(intent, CREATE_DOCUMENT_REQUEST);
         } catch (ActivityNotFoundException error) {
-            clearPendingFile();
-            finishWithError("无法打开系统文件选择器");
+            sendEvent("onAndroidSaveResult", "{\"status\":\"error\",\"message\":\"无法打开系统文件选择器\"}");
+        }
+    }
+
+    private void openSavedLocationPicker() {
+        if (lastSaveUri == null) return;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        if (Build.VERSION.SDK_INT >= 26) {
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, lastSaveUri);
+        }
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException error) {
+            sendEvent("onAndroidSaveResult", "{\"status\":\"error\",\"message\":\"无法打开保存位置\"}");
         }
     }
 
@@ -180,21 +231,18 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != CREATE_DOCUMENT_REQUEST) return;
-
-        File source = pendingFile;
-        String name = pendingName;
-        pendingFile = null;
-        pendingName = null;
-        pendingMime = null;
-        if (source == null || resultCode != RESULT_OK || data == null || data.getData() == null) {
-            if (source != null) source.delete();
-            exportButton.setEnabled(true);
-            showStatus("已取消保存。");
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            sendEvent("onAndroidSaveResult", "{\"status\":\"cancelled\"}");
             return;
         }
 
+        File source = pendingFile;
+        String name = pendingName;
         Uri destination = data.getData();
-        showStatus("正在保存文件…");
+        if (source == null || !source.isFile()) {
+            sendEvent("onAndroidSaveResult", "{\"status\":\"error\",\"message\":\"文件已失效，请重新导出\"}");
+            return;
+        }
         worker.execute(() -> {
             try (InputStream input = new FileInputStream(source);
                  OutputStream output = getContentResolver().openOutputStream(destination, "w")) {
@@ -204,52 +252,32 @@ public class MainActivity extends Activity {
                 while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
                 output.flush();
                 runOnUiThread(() -> {
-                    exportButton.setEnabled(true);
-                    showStatus("已保存：" + name);
+                    lastSaveUri = destination;
+                    getPreferences(MODE_PRIVATE).edit().putString(LAST_SAVE_URI, destination.toString()).apply();
+                    sendEvent("onAndroidSaveResult", "{\"status\":\"saved\",\"name\":"
+                        + JSONObject.quote(name) + "}");
                 });
             } catch (IOException error) {
-                runOnUiThread(() -> finishWithError("保存文件失败，请重试"));
-            } finally {
-                source.delete();
+                runOnUiThread(() -> sendEvent("onAndroidSaveResult", "{\"status\":\"error\",\"message\":\"保存文件失败，请重试\"}"));
             }
         });
-    }
-
-    private void clearPendingFile() {
-        if (pendingFile != null) pendingFile.delete();
-        pendingFile = null;
-        pendingName = null;
-        pendingMime = null;
-    }
-
-    private void finishWithError(String message) {
-        exportButton.setEnabled(true);
-        showError(message);
-    }
-
-    private void showError(String message) {
-        statusText.setTextColor(Color.rgb(167, 66, 52));
-        statusText.setText(message);
-    }
-
-    private void showStatus(String message) {
-        statusText.setTextColor(Color.rgb(92, 98, 90));
-        statusText.setText(message);
     }
 
     @Override
     protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         if (pendingFile != null) {
-            state.putString(PENDING_PATH, pendingFile.getAbsolutePath());
-            state.putString(PENDING_NAME, pendingName);
-            state.putString(PENDING_MIME, pendingMime);
+            state.putString("pending_path", pendingFile.getAbsolutePath());
+            state.putString("pending_name", pendingName);
+            state.putString("pending_mime", pendingMime);
         }
     }
 
     @Override
     protected void onDestroy() {
         worker.shutdown();
+        if (pendingFile != null && !isChangingConfigurations()) pendingFile.delete();
+        webView.destroy();
         super.onDestroy();
     }
 }

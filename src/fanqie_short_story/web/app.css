@@ -90,11 +90,21 @@ textarea::placeholder { color: #aaa39a; }
 .stage-star { position: absolute; color: #c0876d; }
 .star-a { top: 58px; right: 12%; font-size: 20px; }
 .star-b { bottom: 40px; left: 13%; font-size: 15px; }
-.book-page { position: absolute; z-index: 3; top: 32px; left: 29px; width: 177px; height: 258px; border: 1px solid #f0d4c2; border-radius: 3px 8px 8px 3px; background: repeating-linear-gradient(#fff7eb, #fff7eb 18px, #eadfd4 19px); box-shadow: 4px 3px 10px #6d2c2355; opacity: 0; transform-origin: left center; backface-visibility: hidden; }
-.preview.is-loading .book-cover { animation: book-bob 1.4s ease-in-out infinite; }
-.preview.is-loading .book-page { opacity: .96; animation: page-flip 1.4s ease-in-out infinite; }
-@keyframes book-bob { 0%, 100% { transform: rotate(-8deg) translate(6px, 3px); } 50% { transform: rotate(-6deg) translate(6px, -4px); } }
-@keyframes page-flip { 0%, 12% { transform: perspective(420px) rotateY(0); } 65%, 83% { transform: perspective(420px) rotateY(-175deg); } 100% { transform: perspective(420px) rotateY(-360deg); } }
+.book-underpage, .book-page { position: absolute; top: 32px; left: 29px; width: 177px; height: 258px; border-radius: 3px 8px 8px 3px; opacity: 0; }
+.book-underpage { z-index: 2; border: 1px solid #ead4c2; background: repeating-linear-gradient(#fff8ed, #fff8ed 18px, #eadfd4 19px); box-shadow: inset 11px 0 16px #a37b662e, 4px 3px 9px #6d2c2330; }
+.book-page { z-index: 3; transform-origin: left center; transform-style: preserve-3d; }
+.book-page::before, .book-page::after { content: ""; position: absolute; inset: 0; border: 1px solid #ead4c2; border-radius: inherit; backface-visibility: hidden; }
+.book-page::before { background: linear-gradient(90deg, #c6ab9880, transparent 12%, transparent 82%, #d7ad9166), repeating-linear-gradient(#fff8ed, #fff8ed 18px, #eadfd4 19px); box-shadow: 5px 7px 13px #6d2c2345; }
+.book-page::after { background: linear-gradient(270deg, #b597815c, transparent 15%), repeating-linear-gradient(#fff3e4, #fff3e4 18px, #e5d8ca 19px); transform: rotateY(180deg); box-shadow: -4px 7px 12px #6d2c233d; }
+.preview.is-loading .book-underpage { opacity: 1; }
+.preview.is-loading .book-page { animation: page-turn 2.1s infinite; }
+@keyframes page-turn {
+  0%, 9% { opacity: 0; transform: perspective(650px) rotateY(0deg); }
+  12% { opacity: 1; transform: perspective(650px) rotateY(0deg); animation-timing-function: cubic-bezier(.48, .02, .24, 1); }
+  60% { opacity: 1; transform: perspective(650px) rotateY(-112deg); animation-timing-function: cubic-bezier(.38, 0, .64, 1); }
+  79% { opacity: 1; transform: perspective(650px) rotateY(-168deg); }
+  84%, 100% { opacity: 0; transform: perspective(650px) rotateY(-168deg); }
+}
 .preview-foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; min-height: 95px; margin: 0 23px 23px; padding: 20px 24px; border: 1px solid #eadfd2; border-radius: 17px; background: #fffcf7; box-shadow: 0 9px 25px #94765c18; }
 .preview-foot > strong { font-family: var(--serif); font-size: 23px; }
 .result { gap: 14px; }
@@ -127,8 +137,13 @@ footer { padding: 18px 0 34px; border-top: 1px solid #ded7cb; color: #958c80; fo
   .mini-book i { position: absolute; top: 2px; width: 19px; height: 22px; border: 2px solid var(--red); background: #fff7f0; }
   .mini-book i:first-child { left: 1px; border-radius: 3px 1px 1px 3px; }
   .mini-book i:nth-child(2) { left: 20px; border-radius: 1px 3px 3px 1px; }
-  .mini-book i:last-child { left: 20px; border-left: 0; background: #f5dbcb; transform-origin: left center; animation: mini-page-flip 1.25s ease-in-out infinite; }
-  @keyframes mini-page-flip { 0%, 12% { transform: rotateY(0); } 60%, 78% { transform: rotateY(-170deg); } 100% { transform: rotateY(-360deg); } }
+  .mini-book i:last-child { left: 20px; border-left: 0; background: linear-gradient(90deg, #edc6b2, #fff7f0 28%, #f5dbcb); transform-origin: left center; animation: mini-page-turn 1.8s infinite; }
+  @keyframes mini-page-turn {
+    0%, 10% { opacity: 0; transform: rotateY(0); }
+    14% { opacity: 1; transform: rotateY(0); animation-timing-function: cubic-bezier(.48, .02, .24, 1); }
+    75% { opacity: 1; transform: rotateY(-165deg); }
+    82%, 100% { opacity: 0; transform: rotateY(-165deg); }
+  }
 }
 @media (max-width: 600px) {
   .shell { padding: 0 18px; }

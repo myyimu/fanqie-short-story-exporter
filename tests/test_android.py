@@ -24,7 +24,7 @@ class AndroidExportTests(unittest.TestCase):
             path = Path(directory) / "export.tmp"
             with patch("fanqie_short_story.android.prepare_export", return_value=result) as export:
                 response = prepare_android_export(text, "txt", "skip", str(path))
-            self.assertEqual(response, ("ok", "example.txt", "text/plain", 5, 0))
+            self.assertEqual(response, ("ok", "example.txt", "text/plain", 5, 0, "示例", ""))
             self.assertEqual(path.read_bytes(), b"story")
             export.assert_called_once_with(SHORT_A, ["txt"], "skip")
 

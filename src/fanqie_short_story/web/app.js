@@ -11,10 +11,70 @@ const previewEmpty = document.getElementById('preview-empty');
 const mobileLoader = document.getElementById('mobile-book-loader');
 const downloadRadio = document.querySelector('input[name="images"][value="download"]');
 const token = document.querySelector('meta[name="local-token"]').content;
+const isAndroid = typeof window.AndroidExporter !== 'undefined';
 const maxBatchStories = 10;
 const shareUrlPattern = /https:\/\/changdunovel\.com\/[^\s<>"'“”‘’]+/gi;
 const trailingPunctuation = /[.,;:!?，。；：！？、)\]}）】》」』]+$/u;
 let lastDownload = null;
+let androidRequest = null;
+
+if (isAndroid) document.getElementById('exit-button').hidden = true;
+
+window.setAndroidShareText = text => {
+  urlField.value = text;
+  urlField.dispatchEvent(new Event('input'));
+};
+
+window.onAndroidExportResult = result => {
+  if (!androidRequest) return;
+  const request = androidRequest;
+  androidRequest = null;
+  if (result.status === 'ok') request.resolve(result);
+  else request.reject(new Error(result.message || '导出失败，请稍后重试。'));
+};
+
+window.onAndroidSaveResult = result => {
+  if (result.status === 'saved') {
+    statusLine.textContent = `已保存：${result.name}`;
+    document.getElementById('result-meta').textContent = `已保存：${result.name}`;
+    document.getElementById('open-folder-button').hidden = false;
+  } else if (result.status === 'cancelled') {
+    statusLine.textContent = '已取消保存，可点击再次下载。';
+    document.getElementById('result-meta').textContent = '未保存 · 可点击再次下载';
+  } else {
+    showError(result.message || '保存失败，请重试。');
+  }
+};
+
+function requestAndroidExport(text, formats, images) {
+  return new Promise((resolve, reject) => {
+    androidRequest = { resolve, reject };
+    window.AndroidExporter.startExport(text, formats.join(','), images);
+  });
+}
+
+async function requestWebExport(urls, formats, images) {
+  const isBatch = urls.length > 1;
+  const response = await fetch(isBatch ? '/api/export-batch' : '/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Local-Token': token },
+    body: JSON.stringify(isBatch ? { urls, formats, images } : { url: urls[0], formats, images }),
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(detail.error || '导出失败，请稍后重试。');
+  }
+
+  const blob = await response.blob();
+  return {
+    name: decodeURIComponent(response.headers.get('X-Download-Name') || 'short-story.zip'),
+    title: decodeURIComponent(response.headers.get('X-Story-Title') || '导出完成'),
+    author: decodeURIComponent(response.headers.get('X-Story-Author') || ''),
+    failures: Number(response.headers.get('X-Export-Failures') || 0),
+    href: URL.createObjectURL(blob),
+  };
+}
 
 function shareUrlsFromText(text) {
   return (text.match(shareUrlPattern) || []).map(url => url.replace(trailingPunctuation, ''));
@@ -38,6 +98,10 @@ function updateImageOptions() {
 
 function downloadAgain() {
   if (!lastDownload) return;
+  if (isAndroid) {
+    window.AndroidExporter.savePrepared();
+    return;
+  }
   const anchor = document.createElement('a');
   anchor.href = lastDownload.href;
   anchor.download = lastDownload.name;
@@ -54,6 +118,9 @@ document.querySelectorAll('input[name="format"], input[name="images"]').forEach(
 });
 urlField.addEventListener('input', () => { errorBox.hidden = true; });
 document.getElementById('again-button').addEventListener('click', downloadAgain);
+document.getElementById('open-folder-button').addEventListener('click', () => {
+  if (isAndroid) window.AndroidExporter.openSavedLocation();
+});
 document.getElementById('exit-button').addEventListener('click', async () => {
   try {
     await fetch('/api/shutdown', {
@@ -69,7 +136,7 @@ document.getElementById('exit-button').addEventListener('click', async () => {
   }
 });
 window.addEventListener('beforeunload', () => {
-  if (lastDownload) URL.revokeObjectURL(lastDownload.href);
+  if (lastDownload?.href) URL.revokeObjectURL(lastDownload.href);
 });
 
 form.addEventListener('submit', async event => {
@@ -104,26 +171,14 @@ form.addEventListener('submit', async event => {
   loading.querySelector('strong').textContent = isBatch ? `正在整理 ${urls.length} 篇…` : '正在整理…';
   mobileLoader.hidden = false;
   statusLine.textContent = isBatch ? `正在导出 ${urls.length} 篇故事。` : '正在导出故事。';
+  document.getElementById('open-folder-button').hidden = true;
   try {
-    const response = await fetch(isBatch ? '/api/export-batch' : '/api/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Local-Token': token },
-      body: JSON.stringify(isBatch ? { urls, formats, images } : { url: urls[0], formats, images }),
-      cache: 'no-store',
-    });
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      throw new Error(detail.error || '导出失败，请稍后重试。');
-    }
-
-    const blob = await response.blob();
-    const name = decodeURIComponent(response.headers.get('X-Download-Name') || 'short-story.zip');
-    const title = decodeURIComponent(response.headers.get('X-Story-Title') || '导出完成');
-    const author = decodeURIComponent(response.headers.get('X-Story-Author') || '');
-    const failures = Number(response.headers.get('X-Export-Failures') || 0);
-    if (lastDownload) URL.revokeObjectURL(lastDownload.href);
-    lastDownload = { href: URL.createObjectURL(blob), name };
-    downloadAgain();
+    const result = isAndroid
+      ? await requestAndroidExport(urlField.value, formats, images)
+      : await requestWebExport(urls, formats, images);
+    const { name, title, author, failures } = result;
+    if (lastDownload?.href) URL.revokeObjectURL(lastDownload.href);
+    lastDownload = isAndroid ? { name } : { href: result.href, name };
 
     const coverTitle = document.getElementById('book-title');
     coverTitle.textContent = title.length > 28 ? title.slice(0, 28) + '…' : title;
@@ -133,10 +188,11 @@ form.addEventListener('submit', async event => {
     const type = name.endsWith('.zip') ? 'ZIP' : name.endsWith('.epub') ? 'EPUB' : name.endsWith('.md') ? 'Markdown' : 'TXT';
     document.getElementById('result-meta').textContent = failures
       ? `${failures} 篇未完成 · 详见 ZIP 内报告`
-      : `${type} 文件已生成`;
+      : isAndroid ? `${type} 文件已生成，请选择保存位置` : `${type} 文件已生成`;
     resultPanel.hidden = false;
     preview.classList.add('has-result');
-    statusLine.textContent = '文件已生成，下载已开始。';
+    statusLine.textContent = isAndroid ? '文件已生成，请选择保存位置。' : '文件已生成，下载已开始。';
+    downloadAgain();
   } catch (error) {
     showError(error instanceof Error ? error.message : '导出失败，请稍后重试。');
     if (hadResult) {

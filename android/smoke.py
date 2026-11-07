@@ -24,39 +24,41 @@ def screen() -> ET.Element:
     return ET.fromstring(adb("shell", "cat", "/sdcard/window.xml"))
 
 
-def tap(view_id: str) -> None:
+def tap_text(label: str) -> None:
     for _ in range(4):
-        node = screen().find(f".//node[@resource-id='{PACKAGE}:id/{view_id}']")
-        if node is not None:
-            left, top, right, bottom = map(int, re.findall(r"\d+", node.attrib["bounds"]))
-            adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
-            return
+        root = screen()
+        for node in root.iter("node"):
+            text = node.attrib.get("text", "") + node.attrib.get("content-desc", "")
+            if label in text:
+                left, top, right, bottom = map(int, re.findall(r"\d+", node.attrib["bounds"]))
+                adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
+                return
         width, height = map(int, re.findall(r"\d+", adb("shell", "wm", "size").decode())[-2:])
         adb(
             "shell", "input", "swipe", str(width // 2), str(height * 4 // 5),
             str(width // 2), str(height // 5), "350",
         )
-    raise AssertionError(f"Missing UI control: {view_id}")
+    raise AssertionError(f"Missing UI text: {label}\n{ET.tostring(root, encoding='unicode')}")
 
 
 def main() -> None:
-    title = screen().find(".//node[@text='番茄短故事导出器']")
-    if title is None:
-        raise AssertionError("Android main screen did not appear")
+    tap_text("Fanqie Short Story Exporter")
+    adb(
+        "shell", "am", "start", "-W", "-a", "android.intent.action.SEND",
+        "-t", "text/plain", "--es", "android.intent.extra.TEXT",
+        "https://changdunovel.com/not-a-share/", "-n", f"{PACKAGE}/.MainActivity",
+    )
+    time.sleep(2)
+    tap_text("下载故事")
 
-    tap("story_input")
-    adb("shell", "input", "text", "invalid")
-    adb("shell", "input", "keyevent", "4")  # Hide the keyboard.
-    tap("export_button")
-
-    expected = "请粘贴番茄短故事分享链接或分享文案"
+    expected = "链接不是短故事分享页"
     for _ in range(12):
-        node = screen().find(f".//node[@resource-id='{PACKAGE}:id/status_text']")
-        if node is not None and node.attrib.get("text") == expected:
+        root = screen()
+        if any(expected in node.attrib.get("text", "") for node in root.iter("node")):
             print("Android UI and packaged Python export bridge responded correctly")
             return
         time.sleep(2)
-    raise AssertionError(f"Expected Python validation message; got {node.attrib if node is not None else 'no status'}")
+    raise AssertionError(f"Expected Python validation message; got {ET.tostring(root, encoding='unicode')}")
 
 
 if __name__ == "__main__":
