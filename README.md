@@ -16,11 +16,12 @@
 2. 双击 `FanqieShortStoryExporter.exe`。程序会自动在浏览器中打开本机界面，无需另装 Python。
 3. 用完后点击界面右上角的「退出」。当前 EXE 未做代码签名，运行前请核对下载来源。
 
-### Android：安装测试版 APK
+### Android：安装正式版 APK
 
-在 GitHub Actions 的 **Build Android APK** 运行记录中，下载 `fanqie-short-story-android-phone-debug` 构建产物并安装其中的 APK。该手机包仅包含 `arm64-v8a`，支持 Android 7.0 及更新版本的 64 位手机。模拟器另有独立的 `x86_64` 构建产物。此 APK 是用于试用的调试签名版本，正式分发请使用下方固定签名的构建。
+1. 从 [Android 0.4.3 发布页](https://github.com/myyimu/fanqie-short-story-exporter/releases/tag/v0.4.3) 下载 `Fanqie-Short-Story-Exporter-Android-0.4.3-signed.apk`。
+2. 在手机上打开 APK 安装。该安装包支持 Android 7.0 及更新版本的 64 位 ARM 手机。
 
-仓库另有手动触发的 **Build signed Android APK** 工作流，使用固定的发布签名并校验证书指纹。后续正式版 APK 应从该工作流构建并上传到 GitHub Release；调试版与发布版的签名不同，不能直接覆盖安装。
+正式版使用固定发布签名，可覆盖安装此前相同签名的版本。调试版使用不同签名，切换到正式版时需要先卸载调试版。模拟器的 `x86_64` 调试包仍可从 GitHub Actions 的 **Build Android APK** 构建产物下载。
 
 Android 与桌面版共用同一份页面文件。打开应用后可粘贴分享文案，也可在其他应用中使用「分享」发送给番茄短故事导出器。选择 TXT、Markdown 或 EPUB 后点击「下载故事」，再用系统文件选择器指定保存位置；保存后可从结果卡片打开保存位置。多篇仍限 10 条链接。
 
