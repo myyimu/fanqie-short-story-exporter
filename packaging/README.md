@@ -12,7 +12,9 @@
 
 ## Android 测试版 APK
 
-`android/` 是 Android WebView 外壳，直接打包 `src/fanqie_short_story/web` 的网页界面，并通过 Chaquopy 复用同目录中的 Python 导出逻辑。Android 仅负责接收分享文本和调用系统文件选择器保存。构建需要 JDK 17、Python 3.13、Android SDK 35 和 Gradle 8.13：
+`android/` 是 Android WebView 外壳，直接打包 `src/fanqie_short_story/web` 的网页界面，并通过 Chaquopy 复用同目录中的 Python 导出逻辑。Android 负责接收分享文本、通过系统文件选择器保存，以及管理下载记录和本地阅读。构建需要 JDK 17、Python 3.13、Android SDK 35 和 Gradle 8.13：
+
+保存后应用会通过 Storage Access Framework 保留文件的读取授权，并将文件名、格式、时间和 URI 记入私有下载记录。记录跨应用与设备重启保留；移动或删除原文件后可能失效，可移除记录并重新添加。TXT 和 Markdown 阅读器最多加载 4 MiB UTF-8 文本，Markdown 只呈现基础排版和图片占位文字。EPUB、ZIP 目前使用外部应用打开。移除记录不会删除原文件。
 
 ```bash
 gradle --project-dir android :app:assemblePhoneDebug

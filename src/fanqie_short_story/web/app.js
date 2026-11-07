@@ -21,6 +21,7 @@ let androidRequest = null;
 if (isAndroid) document.getElementById('exit-button').hidden = true;
 
 window.setAndroidShareText = text => {
+  window.showAndroidExportView?.();
   urlField.value = text;
   urlField.dispatchEvent(new Event('input'));
 };
@@ -35,9 +36,11 @@ window.onAndroidExportResult = result => {
 
 window.onAndroidSaveResult = result => {
   if (result.status === 'saved') {
-    statusLine.textContent = `已保存：${result.name}`;
-    document.getElementById('result-meta').textContent = `已保存：${result.name}`;
+    const message = result.recorded ? `已保存：${result.name}` : `已保存：${result.name} · 此位置未提供长期读取授权`;
+    statusLine.textContent = message;
+    document.getElementById('result-meta').textContent = message;
     document.getElementById('open-folder-button').hidden = false;
+    document.getElementById('show-library-button').hidden = !result.recorded;
   } else if (result.status === 'cancelled') {
     statusLine.textContent = '已取消保存，可点击再次下载。';
     document.getElementById('result-meta').textContent = '未保存 · 可点击再次下载';
@@ -121,6 +124,9 @@ document.getElementById('again-button').addEventListener('click', downloadAgain)
 document.getElementById('open-folder-button').addEventListener('click', () => {
   if (isAndroid) window.AndroidExporter.openSavedLocation();
 });
+document.getElementById('show-library-button').addEventListener('click', () => {
+  window.showAndroidLibraryView?.();
+});
 document.getElementById('exit-button').addEventListener('click', async () => {
   try {
     await fetch('/api/shutdown', {
@@ -172,6 +178,7 @@ form.addEventListener('submit', async event => {
   mobileLoader.hidden = false;
   statusLine.textContent = isBatch ? `正在导出 ${urls.length} 篇故事。` : '正在导出故事。';
   document.getElementById('open-folder-button').hidden = true;
+  document.getElementById('show-library-button').hidden = true;
   try {
     const result = isAndroid
       ? await requestAndroidExport(urlField.value, formats, images)
