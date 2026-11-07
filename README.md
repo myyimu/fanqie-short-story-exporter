@@ -43,6 +43,18 @@ fanqie-short-story-ui
 
 ![桌面界面示例：选择 TXT、Markdown 或 EPUB](docs/images/desktop.png)
 
+### Android 0.4.3
+
+以下截图来自 320 × 640 Android 模拟器，展示的是测试文件。
+
+| 导出故事 | 下载记录 |
+| :---: | :---: |
+| ![Android 导出故事页面](docs/images/android-export.png) | ![Android 下载记录页面](docs/images/android-library.png) |
+
+| EPUB 阅读 | ZIP 内容 |
+| :---: | :---: |
+| ![Android EPUB 章节阅读页面](docs/images/android-epub-reader.png) | ![Android ZIP 文件内容页面](docs/images/android-zip-contents.png) |
+
 ## 使用教程
 
 1. 粘贴短故事分享链接或整段分享文案：`/t/.../` 短链接和完整分享页链接都可以；可一次粘贴多篇，最多识别 10 条链接。
