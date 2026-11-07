@@ -83,5 +83,12 @@ jobs:
             adb shell am start -W -n com.myyimu.fanqiestory/.MainActivity
             sleep 8
             adb shell pidof com.myyimu.fanqiestory
-            python3 android/smoke.py
+            FANQIE_SCREENSHOT_DIR="$RUNNER_TEMP/fanqie-screenshots" python3 android/smoke.py
             if adb logcat -d -s AndroidRuntime:E | grep -q 'FATAL EXCEPTION'; then exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fanqie-android-screenshots
+          path: ${{ runner.temp }}/fanqie-screenshots/*.png
+          if-no-files-found: warn

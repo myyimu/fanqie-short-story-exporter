@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import io
+import os
 import subprocess
 import tempfile
 import time
@@ -13,6 +14,7 @@ from pathlib import Path
 
 
 PACKAGE = "com.myyimu.fanqiestory"
+SCREENSHOT_DIR = os.environ.get("FANQIE_SCREENSHOT_DIR")
 
 
 def sample_epub() -> bytes:
@@ -39,6 +41,13 @@ def sample_epub() -> bytes:
 
 def adb(*args: str) -> bytes:
     return subprocess.check_output(["adb", *args])
+
+
+def capture(name: str) -> None:
+    if SCREENSHOT_DIR:
+        destination = Path(SCREENSHOT_DIR)
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / name).write_bytes(adb("exec-out", "screencap", "-p"))
 
 
 def screen() -> ET.Element:
@@ -137,6 +146,7 @@ def main() -> None:
         time.sleep(1)
     else:
         raise AssertionError("Android export screen did not load")
+    capture("01-export.png")
     open_library()
     for _ in range(8):
         root = screen()
@@ -192,6 +202,7 @@ def main() -> None:
     import_download("fanqie-reader-smoke.epub")
     tap_text("阅读：fanqie-reader-smoke.epub", button_only=True)
     wait_text("模拟器第一章内容")
+    capture("03-epub-reader.png")
     tap_text("下一章", button_only=True)
     wait_text("模拟器第二章内容")
     print("EPUB chapter navigation opened the second chapter")
@@ -205,8 +216,10 @@ def main() -> None:
     print("EPUB reading position persisted across restart")
     tap_text("下载记录", button_only=True)
     import_download("fanqie-reader-smoke.zip")
+    capture("02-library.png")
     tap_text("查看内容：fanqie-reader-smoke.zip", button_only=True)
     wait_text("export-report.txt")
+    capture("04-zip-contents.png")
     tap_text("阅读：压缩书.epub", button_only=True)
     wait_text("模拟器第一章内容")
     tap_text("压缩包", button_only=True)
