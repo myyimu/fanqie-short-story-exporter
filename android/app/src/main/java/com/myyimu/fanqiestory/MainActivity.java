@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private WebView webView;
     private boolean pageReady;
+    private boolean destroyed;
     private String sharedText;
     private File pendingFile;
     private String pendingName;
@@ -127,7 +128,9 @@ public class MainActivity extends Activity {
     }
 
     private void sendEvent(String event, String json) {
-        if (pageReady) webView.evaluateJavascript("window." + event + "(" + json + ")", null);
+        if (pageReady && !destroyed) {
+            webView.evaluateJavascript("window." + event + "(" + json + ")", null);
+        }
     }
 
     private void sendExportError(String message) {
@@ -182,6 +185,10 @@ public class MainActivity extends Activity {
             String title = values.get(5).toString();
             String author = values.get(6).toString();
             runOnUiThread(() -> {
+                if (destroyed) {
+                    output.delete();
+                    return;
+                }
                 if (pendingFile != null) pendingFile.delete();
                 pendingFile = output;
                 pendingName = name;
@@ -275,6 +282,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
+        pageReady = false;
         worker.shutdown();
         if (pendingFile != null && !isChangingConfigurations()) pendingFile.delete();
         webView.destroy();

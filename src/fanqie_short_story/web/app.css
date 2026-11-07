@@ -108,9 +108,10 @@ textarea::placeholder { color: #aaa39a; }
 .preview-foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; min-height: 95px; margin: 0 23px 23px; padding: 20px 24px; border: 1px solid #eadfd2; border-radius: 17px; background: #fffcf7; box-shadow: 0 9px 25px #94765c18; }
 .preview-foot > strong { font-family: var(--serif); font-size: 23px; }
 .result { gap: 14px; }
-.result > div { display: grid; gap: 6px; min-width: 0; }
+.result > div:not(.result-actions) { display: grid; gap: 6px; min-width: 0; }
 .result strong { font-family: var(--serif); font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result span { color: #8b8379; font-size: 11px; }
+.result-actions { display: flex; flex-direction: column; gap: 8px; }
 .result button { flex: none; padding: 9px 12px; border: 1px solid #d4afa3; border-radius: 9px; background: #fff7f2; color: #943d30; font-size: 11px; font-weight: 750; }
 .result button:hover { background: #fcece3; }
 footer { padding: 18px 0 34px; border-top: 1px solid #ded7cb; color: #958c80; font-size: 11px; text-align: center; }
@@ -167,7 +168,11 @@ footer { padding: 18px 0 34px; border-top: 1px solid #ded7cb; color: #958c80; fo
   .book-cover:hover { transform: rotate(-3deg) translate(6px, -5px) scale(.92); }
   .preview-foot { min-height: 75px; margin: 0 16px 16px; padding: 17px 19px; }
   .preview-foot > strong { font-size: 20px; }
-  .result strong { font-size: 16px; }
+  .result { flex-direction: column; align-items: stretch; }
+  .result strong { font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
+  .result span { overflow-wrap: anywhere; }
+  .result-actions { flex-direction: row; }
+  .result-actions button { flex: 1; min-width: 0; }
   footer { line-height: 1.7; }
 }
 @media (prefers-reduced-motion: reduce) {

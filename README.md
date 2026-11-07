@@ -18,7 +18,7 @@
 
 ### Android：安装测试版 APK
 
-在 GitHub Actions 的 **Build Android APK** 运行记录中，下载 `fanqie-short-story-android-debug` 构建产物并安装其中的 APK。支持 Android 7.0 及更新版本的 64 位设备。此 APK 是用于试用的调试签名版本，正式发布前还需要稳定的发布签名。
+在 GitHub Actions 的 **Build Android APK** 运行记录中，下载 `fanqie-short-story-android-phone-debug` 构建产物并安装其中的 APK。该手机包仅包含 `arm64-v8a`，支持 Android 7.0 及更新版本的 64 位手机。模拟器另有独立的 `x86_64` 构建产物。此 APK 是用于试用的调试签名版本，正式发布前还需要稳定的发布签名。
 
 Android 与桌面版共用同一份页面文件。打开应用后可粘贴分享文案，也可在其他应用中使用「分享」发送给番茄短故事导出器。选择 TXT、Markdown 或 EPUB 后点击「下载故事」，再用系统文件选择器指定保存位置；保存后可从结果卡片打开保存位置。多篇仍限 10 条链接。
 

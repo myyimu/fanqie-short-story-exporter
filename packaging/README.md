@@ -15,7 +15,7 @@
 `android/` 是 Android WebView 外壳，直接打包 `src/fanqie_short_story/web` 的网页界面，并通过 Chaquopy 复用同目录中的 Python 导出逻辑。Android 仅负责接收分享文本和调用系统文件选择器保存。构建需要 JDK 17、Python 3.13、Android SDK 35 和 Gradle 8.13：
 
 ```bash
-gradle --project-dir android :app:assembleDebug
+gradle --project-dir android :app:assemblePhoneDebug
 ```
 
-APK 位于 `android/app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的 APK 构建产物。调试签名 APK 可用于安装试用，但不同构建的调试密钥可能不同；即使 `versionCode` 已递增，也可能需要先卸载旧测试版。正式发布前应配置固定的发布签名，之后同一应用 ID、相同签名且更高版本号的 APK 才能覆盖安装。
+手机 APK 位于 `android/app/build/outputs/apk/phone/debug/app-phone-debug.apk`。`emulator` 构建另含 `x86_64`，供 CI 模拟器检查。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的手机 APK 构建产物。调试签名 APK 可用于安装试用，但不同构建的调试密钥可能不同；即使 `versionCode` 已递增，也可能需要先卸载旧测试版。正式发布前应配置固定的发布签名，之后同一应用 ID、相同签名且更高版本号的 APK 才能覆盖安装。
