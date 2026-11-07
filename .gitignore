@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+.gradle/
+local.properties
+*.apk
 *.egg-info/
 build/
 dist/

@@ -16,6 +16,12 @@
 2. 双击 `FanqieShortStoryExporter.exe`。程序会自动在浏览器中打开本机界面，无需另装 Python。
 3. 用完后点击界面右上角的「退出」。当前 EXE 未做代码签名，运行前请核对下载来源。
 
+### Android：安装测试版 APK
+
+在 GitHub Actions 的 **Build Android APK** 运行记录中，下载 `fanqie-short-story-android-debug` 构建产物并安装其中的 APK。支持 Android 7.0 及更新版本的 64 位设备。此 APK 是用于试用的调试签名版本，正式发布前还需要稳定的发布签名。
+
+打开应用后可粘贴分享文案，也可在其他应用中使用「分享」发送给番茄短故事导出器。选择 TXT、Markdown 或 EPUB 后点击「下载故事」，再用系统文件选择器指定保存位置。多篇仍限 10 条链接；Android 版复用下方说明的导出逻辑。
+
 ### 从源码运行
 
 需要 Python 3.10 或更新版本。点击仓库的 **Code → Download ZIP** 下载源码并解压，在项目目录打开终端，运行：

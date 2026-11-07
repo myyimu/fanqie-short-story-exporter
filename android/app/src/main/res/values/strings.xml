@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">番茄短故事导出器</string>
+    <string name="headline">喜欢的故事，值得好好保存。</string>
+    <string name="intro">粘贴分享文案或链接，保存为 TXT、Markdown 或 EPUB。</string>
+    <string name="story_label">短故事分享文案或链接</string>
+    <string name="story_hint">整段分享文案可直接粘贴；支持多篇链接</string>
+    <string name="format_label">保存格式</string>
+    <string name="format_txt">TXT</string>
+    <string name="format_md">Markdown</string>
+    <string name="format_epub">EPUB</string>
+    <string name="images_label">正文图片</string>
+    <string name="images_remote">保留在线图片或标记位置</string>
+    <string name="images_download">下载图片</string>
+    <string name="images_skip">不保留图片</string>
+    <string name="export_button">下载故事</string>
+    <string name="ready_status">准备好了</string>
+    <string name="disclaimer">仅供学习与技术研究，请尊重作品版权与平台规则。</string>
+</resources>
