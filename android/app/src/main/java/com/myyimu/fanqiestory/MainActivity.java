@@ -3,6 +3,7 @@ package com.myyimu.fanqiestory;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
@@ -32,8 +33,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -41,6 +44,7 @@ public class MainActivity extends Activity {
     private static final int CREATE_DOCUMENT_REQUEST = 1001;
     private static final int IMPORT_DOCUMENT_REQUEST = 1002;
     private static final int MAX_READER_BYTES = 4 * 1024 * 1024;
+    private static final int MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
     private static final String ASSET_HOST = "appassets.androidplatform.net";
     private static final String APP_URL = "https://" + ASSET_HOST + "/assets/index.html";
     private static final String LAST_SAVE_URI = "last_save_uri";
@@ -55,6 +59,25 @@ public class MainActivity extends Activity {
     private String pendingMime;
     private Uri lastSaveUri;
     private DownloadHistory downloadHistory;
+    private ArchiveSession archiveSession;
+
+    private static final class ArchiveSession {
+        final String id;
+        final String type;
+        final String name;
+        final File file;
+        String nestedName = "";
+        int sourceIndex = -1;
+        int chapterIndex = -1;
+        final Map<Integer, String> images = new HashMap<>();
+
+        ArchiveSession(String id, String type, String name, File file) {
+            this.id = id;
+            this.type = type;
+            this.name = name;
+            this.file = file;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle state) {
@@ -175,6 +198,33 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void readDownload(String id) {
             worker.execute(() -> readDownloadText(id));
+        }
+
+        @JavascriptInterface
+        public void inspectArchive(String id) {
+            worker.execute(() -> openArchive(id));
+        }
+
+        @JavascriptInterface
+        public void readArchiveItem(String id, int index) {
+            worker.execute(() -> openArchiveItem(id, index));
+        }
+
+        @JavascriptInterface
+        public void readArchiveChapter(String id, int chapter) {
+            worker.execute(() -> openArchiveChapter(id, chapter));
+        }
+
+        @JavascriptInterface
+        public void readArchiveImage(String id, int chapter, int image) {
+            worker.execute(() -> openArchiveImage(id, chapter, image));
+        }
+
+        @JavascriptInterface
+        public void saveReadingPosition(String id, int sourceIndex, int chapter, int permille) {
+            if (chapter < 0 || permille < 0 || permille > 1000) return;
+            getSharedPreferences("reading_position", MODE_PRIVATE).edit()
+                .putString(positionKey(id, sourceIndex), chapter + ":" + permille).commit();
         }
 
         @JavascriptInterface
@@ -371,6 +421,174 @@ public class MainActivity extends Activity {
         }
     }
 
+    private String positionKey(String id, int sourceIndex) {
+        return id + ":" + sourceIndex;
+    }
+
+    private void addReadingPosition(JSONObject payload, String id, int sourceIndex) {
+        String saved = getSharedPreferences("reading_position", MODE_PRIVATE)
+            .getString(positionKey(id, sourceIndex), "0:0");
+        String[] parts = saved.split(":", 2);
+        int chapter = 0;
+        int permille = 0;
+        try {
+            chapter = Math.max(0, Integer.parseInt(parts[0]));
+            permille = Math.max(0, Math.min(1000, Integer.parseInt(parts[1])));
+        } catch (RuntimeException ignored) {
+            // Ignore a malformed saved position.
+        }
+        try {
+            payload.put("resumeChapter", chapter);
+            payload.put("resumePermille", permille);
+        } catch (Exception ignored) {
+            // These keys do not fail with primitive values.
+        }
+    }
+
+    private void closeArchive() {
+        if (archiveSession != null) {
+            archiveSession.file.delete();
+            archiveSession = null;
+        }
+    }
+
+    private ArchiveSession findArchive(String id) {
+        if (archiveSession == null || !archiveSession.id.equals(id)) {
+            runOnUiThread(() -> sendLibraryError("请重新打开文件"));
+            return null;
+        }
+        return archiveSession;
+    }
+
+    private void openArchive(String id) {
+        JSONObject record = downloadHistory.find(id);
+        if (record == null) {
+            runOnUiThread(() -> sendLibraryError("找不到这条下载记录"));
+            return;
+        }
+        String type = record.optString("type");
+        if (!"epub".equals(type) && !"zip".equals(type)) {
+            runOnUiThread(() -> sendLibraryError("此文件不是 EPUB 或 ZIP"));
+            return;
+        }
+        File copy = null;
+        try {
+            copy = File.createTempFile("fanqie-reader-", ".archive", getCacheDir());
+            try (InputStream input = getContentResolver().openInputStream(Uri.parse(record.optString("uri")));
+                 OutputStream output = new java.io.FileOutputStream(copy)) {
+                if (input == null) throw new IOException("No input stream");
+                byte[] buffer = new byte[16 * 1024];
+                int count;
+                int size = 0;
+                while ((count = input.read(buffer)) != -1) {
+                    size += count;
+                    if (size > MAX_ARCHIVE_BYTES) throw new IOException("Archive too large");
+                    output.write(buffer, 0, count);
+                }
+            }
+            JSONObject payload = new JSONObject(Python.getInstance()
+                .getModule("fanqie_short_story.android_reader")
+                .callAttr("inspect_archive", copy.getAbsolutePath(), type).toString());
+            if (payload.has("error")) {
+                String message = payload.optString("error");
+                runOnUiThread(() -> sendLibraryError(message));
+                copy.delete();
+                return;
+            }
+            closeArchive();
+            archiveSession = new ArchiveSession(id, type, record.optString("name"), copy);
+            payload.put("id", id);
+            payload.put("name", record.optString("name"));
+            payload.put("sourceIndex", -1);
+            if ("epub".equals(type)) addReadingPosition(payload, id, -1);
+            runOnUiThread(() -> sendEvent("onAndroidArchiveResult", payload.toString()));
+        } catch (Exception error) {
+            if (copy != null) copy.delete();
+            String message = error instanceof IOException && "Archive too large".equals(error.getMessage())
+                ? "压缩包过大，请用其他应用打开"
+                : "无法读取文件。文件可能已移动、删除或失去访问授权，请重新添加";
+            runOnUiThread(() -> sendLibraryError(message));
+        }
+    }
+
+    private void openArchiveItem(String id, int index) {
+        ArchiveSession session = findArchive(id);
+        if (session == null || !"zip".equals(session.type)) return;
+        try {
+            JSONObject payload = new JSONObject(Python.getInstance()
+                .getModule("fanqie_short_story.android_reader")
+                .callAttr("read_zip_item", session.file.getAbsolutePath(), index).toString());
+            if (payload.has("error")) {
+                String message = payload.optString("error");
+                runOnUiThread(() -> sendLibraryError(message));
+                return;
+            }
+            payload.put("id", id);
+            payload.put("sourceIndex", index);
+            if ("epub".equals(payload.optString("kind"))) {
+                session.nestedName = payload.optString("name");
+                session.sourceIndex = index;
+                session.chapterIndex = -1;
+                session.images.clear();
+                addReadingPosition(payload, id, index);
+            }
+            runOnUiThread(() -> sendEvent("onAndroidArchiveItemResult", payload.toString()));
+        } catch (Exception error) {
+            runOnUiThread(() -> sendLibraryError("无法读取压缩包中的文件"));
+        }
+    }
+
+    private void openArchiveChapter(String id, int chapter) {
+        ArchiveSession session = findArchive(id);
+        if (session == null || "zip".equals(session.type) && session.nestedName.isEmpty()) return;
+        try {
+            JSONObject payload = new JSONObject(Python.getInstance()
+                .getModule("fanqie_short_story.android_reader")
+                .callAttr("read_epub_chapter", session.file.getAbsolutePath(), chapter,
+                    session.nestedName).toString());
+            if (payload.has("error")) {
+                String message = payload.optString("error");
+                runOnUiThread(() -> sendLibraryError(message));
+                return;
+            }
+            session.chapterIndex = chapter;
+            session.images.clear();
+            JSONArray images = payload.optJSONArray("images");
+            if (images != null) {
+                for (int index = 0; index < images.length(); index++) {
+                    JSONObject image = images.optJSONObject(index);
+                    if (image != null) session.images.put(index, image.optString("path"));
+                }
+            }
+            payload.remove("images");
+            payload.put("id", id);
+            payload.put("sourceIndex", session.sourceIndex);
+            runOnUiThread(() -> sendEvent("onAndroidChapterResult", payload.toString()));
+        } catch (Exception error) {
+            runOnUiThread(() -> sendLibraryError("无法读取 EPUB 章节"));
+        }
+    }
+
+    private void openArchiveImage(String id, int chapter, int image) {
+        ArchiveSession session = findArchive(id);
+        if (session == null || session.chapterIndex != chapter) return;
+        String path = session.images.get(image);
+        if (path == null) return;
+        try {
+            JSONObject payload = new JSONObject(Python.getInstance()
+                .getModule("fanqie_short_story.android_reader")
+                .callAttr("read_epub_image", session.file.getAbsolutePath(),
+                    session.nestedName, path).toString());
+            payload.put("id", id);
+            payload.put("sourceIndex", session.sourceIndex);
+            payload.put("chapter", chapter);
+            payload.put("image", image);
+            runOnUiThread(() -> sendEvent("onAndroidImageResult", payload.toString()));
+        } catch (Exception ignored) {
+            // Keep the image's text placeholder if an individual asset is invalid.
+        }
+    }
+
     private void openDownloadFile(String id) {
         JSONObject record = downloadHistory.find(id);
         if (record == null) {
@@ -407,6 +625,13 @@ public class MainActivity extends Activity {
         } catch (SecurityException ignored) {
             // The file provider may have already revoked access.
         }
+        if (archiveSession != null && archiveSession.id.equals(id)) closeArchive();
+        SharedPreferences progress = getSharedPreferences("reading_position", MODE_PRIVATE);
+        SharedPreferences.Editor editor = progress.edit();
+        for (String key : progress.getAll().keySet()) {
+            if (key.startsWith(id + ":")) editor.remove(key);
+        }
+        editor.apply();
         sendDownloads();
     }
 
@@ -502,6 +727,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         destroyed = true;
         pageReady = false;
+        worker.execute(this::closeArchive);
         worker.shutdown();
         if (pendingFile != null && !isChangingConfigurations()) pendingFile.delete();
         webView.destroy();

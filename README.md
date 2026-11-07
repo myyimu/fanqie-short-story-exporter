@@ -24,7 +24,7 @@
 
 Android 与桌面版共用同一份页面文件。打开应用后可粘贴分享文案，也可在其他应用中使用「分享」发送给番茄短故事导出器。选择 TXT、Markdown 或 EPUB 后点击「下载故事」，再用系统文件选择器指定保存位置；保存后可从结果卡片打开保存位置。多篇仍限 10 条链接。
 
-Android 0.4.2 起可在「下载记录」查看已保存的文件，并添加之前保存的 TXT、Markdown、EPUB 或 ZIP。TXT 与 Markdown 可在应用内阅读；EPUB 和 ZIP 可交给其他应用打开。[后续阅读功能规划](docs/android-reading-roadmap.md)。
+Android 0.4.3 起可在「下载记录」阅读已保存的 TXT、Markdown 和 EPUB，也可打开 ZIP 并选择其中的故事、EPUB 或导出报告阅读。EPUB 支持目录、上一章／下一章、内嵌图片和跨重启阅读位置。可添加之前保存的文件；所有格式仍可交给其他应用打开。ZIP 是多篇或多格式导出时生成的合集，不会在应用内自动解压。[阅读功能与限制](docs/android-reading-roadmap.md)。
 
 ### 从源码运行
 

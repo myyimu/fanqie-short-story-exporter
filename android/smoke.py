@@ -3,14 +3,38 @@
 from __future__ import annotations
 
 import re
+import io
 import subprocess
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
 
 PACKAGE = "com.myyimu.fanqiestory"
+
+
+def sample_epub() -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as book:
+        book.writestr("META-INF/container.xml",
+                      '<container><rootfile full-path="OEBPS/content.opf"/></container>')
+        book.writestr("OEBPS/content.opf", """
+            <package><metadata><title>模拟器测试书</title><creator>测试作者</creator></metadata>
+            <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+            <item id="one" href="one.xhtml" media-type="application/xhtml+xml"/>
+            <item id="two" href="two.xhtml" media-type="application/xhtml+xml"/></manifest>
+            <spine><itemref idref="one"/><itemref idref="two"/></spine></package>
+        """)
+        book.writestr("OEBPS/nav.xhtml", """
+            <html xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol>
+            <li><a href="one.xhtml">第一章</a></li><li><a href="two.xhtml">第二章</a></li>
+            </ol></nav></body></html>
+        """)
+        book.writestr("OEBPS/one.xhtml", "<html><body><p>模拟器第一章内容</p></body></html>")
+        book.writestr("OEBPS/two.xhtml", "<html><body><p>模拟器第二章内容</p></body></html>")
+    return output.getvalue()
 
 
 def adb(*args: str) -> bytes:
@@ -62,6 +86,49 @@ def tap_text(
     raise AssertionError(f"Missing UI text: {label}\n{ET.tostring(root, encoding='unicode')}")
 
 
+def wait_text(label: str, attempts: int = 10) -> None:
+    for _ in range(attempts):
+        root = screen()
+        if any(label in node.attrib.get("text", "") for node in root.iter("node")):
+            return
+        time.sleep(1)
+    raise AssertionError(f"Missing UI text: {label}\n{ET.tostring(root, encoding='unicode')}")
+
+
+def open_library(expected_file: str | None = None) -> None:
+    for _ in range(12):
+        root = screen()
+        if any("添加已有文件" in node.attrib.get("text", "") for node in root.iter("node")):
+            if expected_file is None or any(
+                expected_file in node.attrib.get("text", "") for node in root.iter("node")
+            ):
+                return
+            time.sleep(1)
+            continue
+        try:
+            tap_text("下载记录", direction="up", attempts=12, button_only=True, exact_text=True)
+        except AssertionError:
+            pass
+        time.sleep(1)
+    raise AssertionError(f"Download library did not show {expected_file or 'its controls'}")
+
+
+def import_download(name: str) -> None:
+    tap_text("添加已有文件")
+    root = screen()
+    if not any(node.attrib.get("text") == name for node in root.iter("node")):
+        tap_text("Show roots")
+        tap_text("Downloads")
+    tap_text(name, exact_text=True)
+    for _ in range(10):
+        root = screen()
+        if any(node.attrib.get("package") == PACKAGE
+               and node.attrib.get("text") == name for node in root.iter("node")):
+            return
+        time.sleep(1)
+    raise AssertionError(f"Imported file did not appear: {name}")
+
+
 def main() -> None:
     for _ in range(12):
         root = screen()
@@ -70,7 +137,7 @@ def main() -> None:
         time.sleep(1)
     else:
         raise AssertionError("Android export screen did not load")
-    tap_text("下载记录", direction="up")
+    open_library()
     for _ in range(8):
         root = screen()
         if any("还没有下载记录" in node.attrib.get("text", "") for node in root.iter("node")):
@@ -85,10 +152,16 @@ def main() -> None:
         fixture = Path(directory) / "fanqie-reader-smoke.txt"
         fixture.write_text("持久阅读验证", encoding="utf-8")
         adb("push", str(fixture), "/sdcard/Download/fanqie-reader-smoke.txt")
-    tap_text("添加已有文件")
-    tap_text("Show roots")
-    tap_text("Downloads")
-    tap_text("fanqie-reader-smoke.txt", exact_text=True)
+        epub = Path(directory) / "fanqie-reader-smoke.epub"
+        epub.write_bytes(sample_epub())
+        adb("push", str(epub), "/sdcard/Download/fanqie-reader-smoke.epub")
+        bundle = Path(directory) / "fanqie-reader-smoke.zip"
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr("压缩书.txt", "包内 TXT 内容".encode())
+            archive.writestr("压缩书.epub", sample_epub())
+            archive.writestr("export-report.txt", "导出报告内容".encode())
+        adb("push", str(bundle), "/sdcard/Download/fanqie-reader-smoke.zip")
+    import_download("fanqie-reader-smoke.txt")
     for _ in range(10):
         root = screen()
         if any(
@@ -104,8 +177,9 @@ def main() -> None:
 
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
-    tap_text("下载记录", direction="up", attempts=12)
-    tap_text("阅读", attempts=12, button_only=True)
+    time.sleep(3)
+    open_library("fanqie-reader-smoke.txt")
+    tap_text("阅读：fanqie-reader-smoke.txt", attempts=12, button_only=True)
     for _ in range(10):
         root = screen()
         if any("持久阅读验证" in node.attrib.get("text", "") for node in root.iter("node")):
@@ -113,6 +187,32 @@ def main() -> None:
         time.sleep(1)
     else:
         raise AssertionError("Imported TXT could not be read after restarting the app")
+    print("TXT persisted across restart and opened")
+    tap_text("下载记录", button_only=True)
+    import_download("fanqie-reader-smoke.epub")
+    tap_text("阅读：fanqie-reader-smoke.epub", button_only=True)
+    wait_text("模拟器第一章内容")
+    tap_text("下一章", button_only=True)
+    wait_text("模拟器第二章内容")
+    print("EPUB chapter navigation opened the second chapter")
+
+    adb("shell", "am", "force-stop", PACKAGE)
+    adb("shell", "am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
+    time.sleep(3)
+    open_library("fanqie-reader-smoke.epub")
+    tap_text("阅读：fanqie-reader-smoke.epub", button_only=True)
+    wait_text("模拟器第二章内容")
+    print("EPUB reading position persisted across restart")
+    tap_text("下载记录", button_only=True)
+    import_download("fanqie-reader-smoke.zip")
+    tap_text("查看内容：fanqie-reader-smoke.zip", button_only=True)
+    wait_text("export-report.txt")
+    tap_text("阅读：压缩书.epub", button_only=True)
+    wait_text("模拟器第一章内容")
+    tap_text("压缩包", button_only=True)
+    tap_text("阅读：export-report.txt", button_only=True)
+    wait_text("导出报告内容")
+    print("ZIP inventory, nested EPUB, and export report opened")
     tap_text("返回导出")
     adb(
         "shell", "am", "start", "-W", "-a", "android.intent.action.SEND",

@@ -78,13 +78,25 @@
     </main>
     <section class="library-view" id="library-view" aria-label="下载记录" hidden>
       <div id="library-list-view">
-        <div class="library-heading"><div><span class="library-kicker">已保存的故事</span><h1>下载记录</h1><p>重新打开已保存的文件。TXT 与 Markdown 可在应用内阅读。</p></div><button type="button" class="library-add" id="library-add">添加已有文件 +</button></div>
+        <div class="library-heading"><div><span class="library-kicker">已保存的故事</span><h1>下载记录</h1><p>TXT、Markdown、EPUB 和 ZIP 均可在应用内查看。</p></div><button type="button" class="library-add" id="library-add">添加已有文件 +</button></div>
         <p class="library-message" id="library-message" role="status" hidden></p>
         <div class="library-list" id="library-list"></div>
       </div>
+      <div id="archive-view" hidden>
+        <button type="button" class="reader-back" id="archive-back">← 下载记录</button>
+        <header class="reader-heading"><span>ZIP 文件</span><h1 id="archive-title"></h1><p>选择故事、EPUB 或导出报告阅读。图片等附件不会单独列出。</p></header>
+        <p class="library-message" id="archive-message" role="status" hidden></p>
+        <div class="library-list" id="archive-list"></div>
+      </div>
       <div class="reader-view" id="reader-view" hidden>
         <button type="button" class="reader-back" id="reader-back">← 下载记录</button>
-        <header class="reader-heading"><span id="reader-type"></span><h1 id="reader-title"></h1></header>
+        <header class="reader-heading"><span id="reader-type"></span><h1 id="reader-title"></h1><p id="reader-author" hidden></p></header>
+        <div class="reader-navigation" id="reader-navigation" hidden>
+          <label for="reader-chapter">目录</label><select id="reader-chapter" aria-label="选择章节"></select>
+          <div class="reader-nav-actions"><button type="button" id="reader-previous">上一章</button><button type="button" id="reader-next">下一章</button></div>
+          <span id="reader-progress"></span>
+        </div>
+        <p class="library-message" id="reader-message" role="status" hidden></p>
         <article class="reader-content" id="reader-content"></article>
       </div>
     </section>

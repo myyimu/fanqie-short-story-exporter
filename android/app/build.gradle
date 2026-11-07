@@ -11,8 +11,8 @@ android {
         applicationId 'com.myyimu.fanqiestory'
         minSdk 24
         targetSdk 35
-        versionCode 4
-        versionName '0.4.2'
+        versionCode 5
+        versionName '0.4.3'
     }
 
     flavorDimensions 'abi'

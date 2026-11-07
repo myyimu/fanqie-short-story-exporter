@@ -6,27 +6,50 @@
   const workspace = document.querySelector('.workspace');
   const library = document.getElementById('library-view');
   const listView = document.getElementById('library-list-view');
+  const archiveView = document.getElementById('archive-view');
   const readerView = document.getElementById('reader-view');
   const list = document.getElementById('library-list');
-  const message = document.getElementById('library-message');
+  const archiveList = document.getElementById('archive-list');
+  const content = document.getElementById('reader-content');
+  const chapterSelect = document.getElementById('reader-chapter');
+  const messages = ['library-message', 'archive-message', 'reader-message']
+    .map(id => document.getElementById(id));
   let view = 'export';
   let pendingRead = null;
+  let pendingArchive = null;
+  let pendingItem = null;
+  let pendingChapter = null;
+  let bookInfo = null;
+  let readerOrigin = 'library';
+  let currentChapter = -1;
+  let scrollTimer = null;
+  let restorePermille = 0;
+  let remainingImages = 0;
 
   document.body.classList.add('android-app');
   toggle.hidden = false;
 
   function showMessage(text, isError = false) {
-    message.textContent = text;
-    message.classList.toggle('is-error', isError);
-    message.hidden = !text;
+    for (const message of messages) {
+      message.textContent = text;
+      message.classList.toggle('is-error', isError);
+      message.hidden = !text;
+    }
   }
 
   function showView(next) {
-    if (next === 'export') pendingRead = null;
+    if (view === 'reader' && next !== 'reader') savePosition();
+    if (next === 'export') {
+      pendingRead = null;
+      pendingArchive = null;
+      pendingItem = null;
+      pendingChapter = null;
+    }
     view = next;
     workspace.hidden = next !== 'export';
     library.hidden = next === 'export';
-    listView.hidden = next === 'reader';
+    listView.hidden = next !== 'library';
+    archiveView.hidden = next !== 'archive';
     readerView.hidden = next !== 'reader';
     toggle.textContent = next === 'export' ? '下载记录' : '返回导出';
     if (next === 'library') bridge.listDownloads();
@@ -36,7 +59,8 @@
   window.showAndroidExportView = () => showView('export');
   window.showAndroidLibraryView = () => showView('library');
   window.handleAndroidBack = () => {
-    if (view === 'reader') showView('library');
+    if (view === 'reader') showView(readerOrigin);
+    else if (view === 'archive') showView('library');
     else if (view === 'library') showView('export');
     else return false;
     return true;
@@ -77,13 +101,16 @@
       details.append(title, meta);
       const actions = document.createElement('div');
       actions.className = 'library-actions';
-      if (record.type === 'txt' || record.type === 'md') {
-        actions.append(actionButton('阅读', () => {
-          showMessage('正在读取文件…');
+      actions.append(actionButton(record.type === 'zip' ? '查看内容' : '阅读', () => {
+        showMessage('正在读取文件…');
+        if (record.type === 'txt' || record.type === 'md') {
           pendingRead = record.id;
           bridge.readDownload(record.id);
-        }, record.name));
-      }
+        } else {
+          pendingArchive = record.id;
+          bridge.inspectArchive(record.id);
+        }
+      }, record.name));
       actions.append(actionButton('用其他应用打开', () => bridge.openDownload(record.id), record.name));
       const remove = actionButton('移除记录', () => {
         showMessage('已移除记录，原文件仍保留。');
@@ -205,12 +232,15 @@
     }
   }
 
-  window.onAndroidReaderResult = result => {
-    if (view !== 'library' || pendingRead !== result.id) return;
-    pendingRead = null;
+  function showText(result, origin) {
+    bookInfo = null;
+    currentChapter = -1;
+    readerOrigin = origin;
+    document.getElementById('reader-back').textContent = origin === 'archive' ? '← 压缩包' : '← 下载记录';
     document.getElementById('reader-title').textContent = result.name;
     document.getElementById('reader-type').textContent = typeLabels[result.type] || '文件';
-    const content = document.getElementById('reader-content');
+    document.getElementById('reader-author').hidden = true;
+    document.getElementById('reader-navigation').hidden = true;
     content.replaceChildren();
     if (result.type === 'md') renderMarkdown(content, result.text);
     else {
@@ -221,11 +251,194 @@
     }
     showMessage('');
     showView('reader');
+  }
+
+  function savePosition() {
+    if (!bookInfo || currentChapter < 0 || view !== 'reader') return;
+    const range = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const permille = Math.max(0, Math.min(1000, Math.round(window.scrollY / range * 1000)));
+    bridge.saveReadingPosition(bookInfo.id, bookInfo.sourceIndex, currentChapter, permille);
+  }
+
+  function requestChapter(index, permille = 0) {
+    if (!bookInfo || index < 0 || index >= bookInfo.chapters.length) return;
+    savePosition();
+    pendingChapter = { index, permille };
+    showMessage('正在读取章节…');
+    bridge.readArchiveChapter(bookInfo.id, index);
+  }
+
+  function openBook(info, origin) {
+    bookInfo = info;
+    readerOrigin = origin;
+    currentChapter = -1;
+    document.getElementById('reader-back').textContent = origin === 'archive' ? '← 压缩包' : '← 下载记录';
+    document.getElementById('reader-type').textContent = 'EPUB';
+    document.getElementById('reader-title').textContent = info.title || info.name;
+    const author = document.getElementById('reader-author');
+    author.textContent = info.author ? `作者：${info.author}` : '';
+    author.hidden = !info.author;
+    chapterSelect.replaceChildren();
+    for (const [index, chapter] of info.chapters.entries()) {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = chapter.label || `第 ${index + 1} 章`;
+      chapterSelect.append(option);
+    }
+    document.getElementById('reader-navigation').hidden = false;
+    content.replaceChildren();
+    showView('reader');
+    const resume = Math.min(Math.max(0, info.resumeChapter || 0), info.chapters.length - 1);
+    requestChapter(resume, info.resumePermille || 0);
+  }
+
+  function renderArchive(info) {
+    document.getElementById('archive-title').textContent = info.name;
+    archiveList.replaceChildren();
+    if (!info.items.length) {
+      const empty = document.createElement('p');
+      empty.className = 'library-empty';
+      empty.textContent = '这个 ZIP 没有可阅读的 TXT、Markdown、EPUB 或导出报告。';
+      archiveList.append(empty);
+    }
+    for (const [index, item] of info.items.entries()) {
+      const card = document.createElement('article');
+      card.className = 'library-card';
+      const icon = document.createElement('span');
+      icon.className = `library-file-icon type-${item.type}`;
+      icon.textContent = (typeLabels[item.type] || '文件').slice(0, 1);
+      const details = document.createElement('div');
+      details.className = 'library-details';
+      const name = document.createElement('strong');
+      name.textContent = item.name;
+      const meta = document.createElement('span');
+      meta.textContent = item.name.endsWith('export-report.txt')
+        ? '导出报告' : `${typeLabels[item.type]} · ${Math.max(1, Math.ceil(item.size / 1024))} KB`;
+      details.append(name, meta);
+      const actions = document.createElement('div');
+      actions.className = 'library-actions';
+      actions.append(actionButton('阅读', () => {
+        pendingItem = { id: info.id, index };
+        showMessage('正在读取文件…');
+        bridge.readArchiveItem(info.id, index);
+      }, item.name));
+      card.append(icon, details, actions);
+      archiveList.append(card);
+    }
+    showMessage('');
+    showView('archive');
+  }
+
+  const safeEpubTags = new Set([
+    'section', 'article', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'blockquote', 'ul', 'ol', 'li', 'strong', 'b', 'em', 'i', 'code', 'pre',
+    'span', 'figure', 'figcaption', 'br', 'hr', 'img',
+  ]);
+  function appendEpubNode(parent, item) {
+    if (typeof item === 'string') {
+      parent.append(document.createTextNode(item));
+      return;
+    }
+    if (!item || !safeEpubTags.has(item.tag)) return;
+    const node = document.createElement(item.tag);
+    if (item.id) node.dataset.epubAnchor = item.id;
+    if (item.class === 'reader-reference') node.className = 'reader-reference';
+    if (item.tag === 'img') {
+      node.alt = item.alt || '插图';
+      node.dataset.imageIndex = String(item.image);
+    } else {
+      for (const child of item.children || []) appendEpubNode(node, child);
+    }
+    parent.append(node);
+  }
+
+  function scrollToChapterPosition(anchor, permille) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (permille > 0) {
+        const range = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        window.scrollTo(0, Math.round(range * permille / 1000));
+      } else if (anchor) {
+        const target = [...content.querySelectorAll('[data-epub-anchor]')]
+          .find(node => node.dataset.epubAnchor === anchor);
+        if (target) target.scrollIntoView();
+        else window.scrollTo(0, 0);
+      } else window.scrollTo(0, 0);
+    }));
+  }
+
+  window.onAndroidReaderResult = result => {
+    if (view !== 'library' || pendingRead !== result.id) return;
+    pendingRead = null;
+    showText(result, 'library');
+  };
+
+  window.onAndroidArchiveResult = result => {
+    if (view !== 'library' || pendingArchive !== result.id) return;
+    pendingArchive = null;
+    if (result.kind === 'zip') renderArchive(result);
+    else if (result.kind === 'epub') openBook(result, 'library');
+  };
+
+  window.onAndroidArchiveItemResult = result => {
+    if (view !== 'archive' || !pendingItem
+        || pendingItem.id !== result.id || pendingItem.index !== result.sourceIndex) return;
+    pendingItem = null;
+    if (result.kind === 'text') showText(result, 'archive');
+    else if (result.kind === 'epub') openBook(result, 'archive');
+  };
+
+  window.onAndroidChapterResult = result => {
+    if (view !== 'reader' || !bookInfo || !pendingChapter
+        || bookInfo.id !== result.id || bookInfo.sourceIndex !== result.sourceIndex
+        || pendingChapter.index !== result.index) return;
+    const { permille } = pendingChapter;
+    pendingChapter = null;
+    currentChapter = result.index;
+    chapterSelect.value = String(currentChapter);
+    document.getElementById('reader-previous').disabled = currentChapter === 0;
+    document.getElementById('reader-next').disabled = currentChapter === bookInfo.chapters.length - 1;
+    document.getElementById('reader-progress').textContent = `${currentChapter + 1} / ${bookInfo.chapters.length}`;
+    content.replaceChildren();
+    for (const node of result.nodes || []) appendEpubNode(content, node);
+    showMessage('');
+    restorePermille = permille;
+    const images = [...content.querySelectorAll('img[data-image-index]')];
+    remainingImages = images.length;
+    scrollToChapterPosition(result.anchor, permille);
+    for (const image of images) {
+      bridge.readArchiveImage(bookInfo.id, currentChapter, Number(image.dataset.imageIndex));
+    }
+    bridge.saveReadingPosition(bookInfo.id, bookInfo.sourceIndex, currentChapter, permille);
+  };
+
+  window.onAndroidImageResult = result => {
+    if (view !== 'reader' || !bookInfo || bookInfo.id !== result.id
+        || bookInfo.sourceIndex !== result.sourceIndex || currentChapter !== result.chapter) return;
+    const image = [...content.querySelectorAll('img[data-image-index]')]
+      .find(node => Number(node.dataset.imageIndex) === result.image);
+    if (image && /^data:image\/(jpeg|png|gif|webp);base64,/.test(result.data || '')) {
+      image.src = result.data;
+    }
+    remainingImages = Math.max(0, remainingImages - 1);
+    if (!remainingImages && restorePermille > 0) {
+      const saved = restorePermille;
+      restorePermille = 0;
+      setTimeout(() => scrollToChapterPosition('', saved), 100);
+    }
   };
   window.onAndroidLibraryError = error => showMessage(error, true);
 
   toggle.addEventListener('click', () => showView(view === 'export' ? 'library' : 'export'));
-  document.getElementById('reader-back').addEventListener('click', () => showView('library'));
+  document.getElementById('reader-back').addEventListener('click', () => showView(readerOrigin));
+  document.getElementById('archive-back').addEventListener('click', () => showView('library'));
+  chapterSelect.addEventListener('change', () => requestChapter(Number(chapterSelect.value)));
+  document.getElementById('reader-previous').addEventListener('click', () => requestChapter(currentChapter - 1));
+  document.getElementById('reader-next').addEventListener('click', () => requestChapter(currentChapter + 1));
+  window.addEventListener('scroll', () => {
+    if (!bookInfo || currentChapter < 0 || view !== 'reader') return;
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(savePosition, 300);
+  }, { passive: true });
   document.getElementById('library-add').addEventListener('click', () => {
     showMessage('');
     bridge.pickExistingFile();
