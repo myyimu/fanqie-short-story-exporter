@@ -76,5 +76,5 @@ jobs:
             sleep 8
             adb shell pidof com.myyimu.fanqiestory
             adb shell uiautomator dump /sdcard/window.xml > /dev/null
-            adb shell cat /sdcard/window.xml | rg -q '番茄短故事导出器'
-            if adb logcat -d -s AndroidRuntime:E | rg -q 'FATAL EXCEPTION'; then exit 1; fi
+            adb shell cat /sdcard/window.xml | grep -q '番茄短故事导出器'
+            if adb logcat -d -s AndroidRuntime:E | grep -q 'FATAL EXCEPTION'; then exit 1; fi
