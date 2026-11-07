@@ -5,6 +5,10 @@ __pycache__/
 .gradle/
 local.properties
 *.apk
+*.jks
+*.keystore
+*.p12
+keystore.properties
 *.egg-info/
 build/
 dist/

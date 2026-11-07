@@ -18,4 +18,10 @@
 gradle --project-dir android :app:assemblePhoneDebug
 ```
 
-手机 APK 位于 `android/app/build/outputs/apk/phone/debug/app-phone-debug.apk`。`emulator` 构建另含 `x86_64`，供 CI 模拟器检查。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的手机 APK 构建产物。调试签名 APK 可用于安装试用，但不同构建的调试密钥可能不同；即使 `versionCode` 已递增，也可能需要先卸载旧测试版。正式发布前应配置固定的发布签名，之后同一应用 ID、相同签名且更高版本号的 APK 才能覆盖安装。
+手机 APK 位于 `android/app/build/outputs/apk/phone/debug/app-phone-debug.apk`。`emulator` 构建另含 `x86_64`，供 CI 模拟器检查。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的手机 APK 构建产物。调试签名 APK 可用于安装试用，但不同构建的调试密钥可能不同；即使 `versionCode` 已递增，也可能需要先卸载旧测试版。固定签名的正式构建使用下方工作流。
+
+### 固定发布签名
+
+**Build signed Android APK** 工作流仅在 `main` 上手动触发。它从仓库 Secrets `ANDROID_RELEASE_KEYSTORE_B64` 和 `ANDROID_RELEASE_PASSWORD` 恢复发布密钥，运行测试、构建 `phoneRelease`，并用 `android/release-cert.sha256` 校验 APK 的签名证书。密钥文件和密码不在 Git 仓库中。签名后的 APK 作为 `fanqie-short-story-android-phone-signed` 构建产物提供；正式向用户分发时应再上传到 GitHub Release。
+
+本机签名时设置 `FANQIE_RELEASE_KEYSTORE` 为 keystore 的绝对路径、`FANQIE_RELEASE_PASSWORD` 为密码，然后运行 `gradle --project-dir android :app:assemblePhoneRelease`。后续每次发布都保留相同应用 ID 和证书，同时提高 `versionCode`。从先前调试签名版切换到发布签名版，需要先卸载调试版。

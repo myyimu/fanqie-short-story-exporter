@@ -11,8 +11,8 @@ android {
         applicationId 'com.myyimu.fanqiestory'
         minSdk 24
         targetSdk 35
-        versionCode 2
-        versionName '0.4.0'
+        versionCode 3
+        versionName '0.4.1'
     }
 
     flavorDimensions 'abi'
@@ -24,6 +24,25 @@ android {
         emulator {
             dimension 'abi'
             ndk { abiFilters 'x86_64' }
+        }
+    }
+
+    signingConfigs {
+        release {
+            keyAlias 'fanqie-release'
+            def keystore = System.getenv('FANQIE_RELEASE_KEYSTORE')
+            def password = System.getenv('FANQIE_RELEASE_PASSWORD')
+            if (keystore) storeFile file(keystore)
+            if (password) {
+                storePassword password
+                keyPassword password
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
         }
     }
 
