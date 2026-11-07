@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from fanqie_short_story.assets import download_images
 from fanqie_short_story.cli import main, safe_stem
 from fanqie_short_story.client import DownloadError, Story, fetch_story
-from fanqie_short_story.link import ShareLink, resolve_share_link
+from fanqie_short_story.link import ShareLink, extract_share_urls, resolve_share_link
 from fanqie_short_story.render import parse_blocks, render_markdown, render_txt
 
 
@@ -58,6 +58,22 @@ class FakeImageResponse:
 
 
 class ShareLinkTests(unittest.TestCase):
+    def test_copied_share_text_extracts_short_link_with_nbsp(self):
+        text = f"推荐一章短篇《示例故事》{SHORT_LINK}\u00a0  “"
+        self.assertEqual(
+            extract_share_urls(text),
+            [SHORT_LINK],
+        )
+
+    def test_full_share_link_inside_sentence_is_validated(self):
+        link = resolve_share_link(f"推荐这篇：{LINK}。")
+        self.assertEqual(link.post_id, "123456")
+        self.assertEqual(link.share_code, "test=")
+
+    def test_multiple_links_in_one_story_input_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "一次只接受一条"):
+            resolve_share_link(f"{SHORT_LINK} 还有 {SHORT_LINK}")
+
     def test_short_link_uses_only_validated_redirect_fields(self):
         with patch("fanqie_short_story.link.build_opener") as build:
             build.return_value.open.side_effect = HTTPError(

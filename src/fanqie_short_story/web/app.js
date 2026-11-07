@@ -12,7 +12,13 @@ const mobileLoader = document.getElementById('mobile-book-loader');
 const downloadRadio = document.querySelector('input[name="images"][value="download"]');
 const token = document.querySelector('meta[name="local-token"]').content;
 const maxBatchStories = 10;
+const shareUrlPattern = /https:\/\/changdunovel\.com\/[^\s<>"'“”‘’]+/gi;
+const trailingPunctuation = /[.,;:!?，。；：！？、)\]}）】》」』]+$/u;
 let lastDownload = null;
+
+function shareUrlsFromText(text) {
+  return (text.match(shareUrlPattern) || []).map(url => url.replace(trailingPunctuation, ''));
+}
 
 function showError(message) {
   errorBox.textContent = message;
@@ -69,11 +75,11 @@ window.addEventListener('beforeunload', () => {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   errorBox.hidden = true;
-  const urls = urlField.value.split(/\r?\n/).map(url => url.trim()).filter(Boolean);
+  const urls = shareUrlsFromText(urlField.value);
   const formats = [...document.querySelectorAll('input[name="format"]:checked')].map(input => input.value);
   const images = document.querySelector('input[name="images"]:checked').value;
   if (!urls.length) {
-    showError('请先粘贴分享链接。');
+    showError('请先粘贴短故事分享链接或分享文案。');
     urlField.focus();
     return;
   }

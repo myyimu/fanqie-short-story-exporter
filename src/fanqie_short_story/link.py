@@ -14,6 +14,10 @@ DETAIL_PATH = "/reading/ugc/postdata/detail/v1/"
 ORIGIN = "https://changdunovel.com"
 EXPORT_PERCENT = 100
 SHORT_PATH = re.compile(r"/t/[A-Za-z0-9_-]{1,256}/?\Z")
+SHARE_URL_IN_TEXT = re.compile(
+    r"https://changdunovel\.com/[^\s<>\"'“”‘’]+", re.IGNORECASE
+)
+TRAILING_PUNCTUATION = ",.;:!?，。；：！？、)]}）】》」』"
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -26,6 +30,14 @@ def _one(query: dict[str, list[str]], name: str, default: str = "") -> str:
     if len(values) > 1:
         raise ValueError(f"链接中的 {name} 参数重复")
     return values[0] if values else default
+
+
+def extract_share_urls(text: str) -> list[str]:
+    """Find share URLs in copied text without including surrounding punctuation."""
+    return [
+        match.group(0).rstrip(TRAILING_PUNCTUATION)
+        for match in SHARE_URL_IN_TEXT.finditer(text)
+    ]
 
 
 @dataclass(frozen=True)
@@ -110,7 +122,12 @@ class ShareLink:
 
 
 def resolve_share_link(raw_url: str, *, timeout: float = 20) -> ShareLink:
-    """Accept a full share URL or inspect one public short-link redirect."""
+    """Accept a share URL inside copied text or inspect a short-link redirect."""
+    found = extract_share_urls(raw_url)
+    if len(found) > 1:
+        raise ValueError("一次只接受一条短故事链接")
+    if found:
+        raw_url = found[0]
     parsed = urlsplit(raw_url.strip())
     if (
         parsed.scheme != "https"

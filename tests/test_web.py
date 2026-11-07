@@ -42,7 +42,7 @@ def fake_images(_blocks, output_dir, stem, *, timeout):
 class PrepareExportTests(unittest.TestCase):
     def test_single_text_is_direct_download_without_link_identifiers(self):
         with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY) as fetch:
-            result = prepare_export(LINK, ["txt"], "remote")
+            result = prepare_export(f"推荐一篇短故事：{LINK}。", ["txt"], "remote")
         self.assertEqual(fetch.call_args.args[0].percent, 100)
         self.assertEqual(result.name, "示例故事-123456.txt")
         self.assertIn("开头。", result.data.decode("utf-8"))
@@ -160,7 +160,7 @@ class LocalServerTests(unittest.TestCase):
         self.thread.join(timeout=2)
 
     def test_page_has_token_and_rejects_cross_origin_export(self):
-        with urlopen(self.server.origin, timeout=5) as response:
+        with urlopen(self.server.origin + "/", timeout=5) as response:
             html = response.read().decode("utf-8")
             self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertIn(self.server.token, html)
@@ -190,7 +190,7 @@ class LocalServerTests(unittest.TestCase):
     def test_same_origin_request_downloads_without_echoing_private_url(self):
         request = Request(
             self.server.origin + "/api/export",
-            data=json.dumps({"url": LINK, "formats": ["md"], "images": "skip"}).encode(),
+            data=json.dumps({"url": f"推荐这篇：{LINK}。", "formats": ["md"], "images": "skip"}).encode(),
             headers={
                 "Content-Type": "application/json",
                 "Origin": self.server.origin,
