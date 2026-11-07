@@ -53,6 +53,7 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
           name: fanqie-short-story-android-debug
@@ -75,6 +76,5 @@ jobs:
             adb shell am start -W -n com.myyimu.fanqiestory/.MainActivity
             sleep 8
             adb shell pidof com.myyimu.fanqiestory
-            adb shell uiautomator dump /sdcard/window.xml > /dev/null
-            adb shell cat /sdcard/window.xml | grep -q '番茄短故事导出器'
+            python3 android/smoke.py
             if adb logcat -d -s AndroidRuntime:E | grep -q 'FATAL EXCEPTION'; then exit 1; fi
