@@ -31,7 +31,7 @@ SECOND_LINK = LINK.replace("post_id=123456", "post_id=654321")
 SECOND_STORY = Story("第二篇", "作者二", "654321", "987", "<p>第二篇正文。</p>", "第二篇正文。")
 
 
-def fake_images(_blocks, output_dir, stem, *, timeout):
+def fake_images(_blocks, output_dir, stem, *, timeout, max_total_bytes):
     relative = f"{stem}_assets/image-001.jpg"
     target = output_dir / relative
     target.parent.mkdir(parents=True)
@@ -47,6 +47,18 @@ class PrepareExportTests(unittest.TestCase):
         self.assertEqual(result.name, "示例故事-123456.txt")
         self.assertIn("开头。", result.data.decode("utf-8"))
         self.assertNotIn(b"private-token", result.data)
+
+    def test_single_export_rejects_output_over_limit(self):
+        with patch("fanqie_short_story.web.MAX_SINGLE_EXPORT_BYTES", 16):
+            with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
+                with self.assertRaisesRegex(DownloadError, "单篇导出超过"):
+                    prepare_export(LINK, ["txt"], "skip")
+
+    def test_epub_rejects_output_over_limit(self):
+        with patch("fanqie_short_story.web.MAX_SINGLE_EXPORT_BYTES", 100):
+            with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
+                with self.assertRaisesRegex(DownloadError, "单篇导出超过"):
+                    prepare_export(LINK, ["epub"], "skip")
 
     def test_two_formats_and_offline_image_form_zip(self):
         with patch("fanqie_short_story.exporter.fetch_story", return_value=STORY):
@@ -166,6 +178,11 @@ class LocalServerTests(unittest.TestCase):
         self.assertIn(self.server.token, html)
         self.assertIn("仅供学习与技术研究", html)
         self.assertIn('value="epub"', html)
+
+        with urlopen(self.server.origin + "/library.js", timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers.get_content_type(), "text/javascript")
+            self.assertIn(b"library-toggle", response.read())
 
         with patch("fanqie_short_story.exporter.fetch_story") as fetch:
             for path, data in (

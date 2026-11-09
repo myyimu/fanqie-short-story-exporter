@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from .client import DownloadError
+from .limits import MAX_OFFLINE_IMAGE_BYTES
 from .render import Block
 
 
@@ -32,10 +33,12 @@ def download_images(
     *,
     timeout: float = 20,
     opener: Callable[..., object] = urlopen,
+    max_total_bytes: int = MAX_OFFLINE_IMAGE_BYTES,
 ) -> dict[int, str]:
     asset_dir = output_dir / f"{stem}_assets"
     paths: dict[int, str] = {}
     image_number = 0
+    total_bytes = 0
     for block in blocks:
         if block.kind != "image":
             continue
@@ -53,6 +56,9 @@ def download_images(
             raise DownloadError(f"插图 {image_number} 下载失败") from error
         if len(data) > MAX_IMAGE_BYTES:
             raise DownloadError(f"插图 {image_number} 超过大小限制")
+        total_bytes += len(data)
+        if total_bytes > max_total_bytes:
+            raise DownloadError("离线插图总量超过大小限制")
         extension = mimetypes.guess_extension(content_type) or ".img"
         if extension == ".jpe":
             extension = ".jpg"

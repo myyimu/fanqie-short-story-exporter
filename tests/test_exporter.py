@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from fanqie_short_story.assets import download_images
 from fanqie_short_story.cli import main, safe_stem
 from fanqie_short_story.client import DownloadError, Story, fetch_story
+from fanqie_short_story.limits import MAX_STORY_RESPONSE_BYTES
 from fanqie_short_story.link import ShareLink, extract_share_urls, resolve_share_link
 from fanqie_short_story.render import parse_blocks, render_markdown, render_txt
 
@@ -40,8 +41,9 @@ class FakeResponse:
     def __exit__(self, *_):
         return False
 
-    def read(self):
-        return self.payload
+    def read(self, size=-1):
+        self.read_size = size
+        return self.payload if size < 0 else self.payload[:size]
 
 
 class FakeImageResponse:
@@ -151,6 +153,14 @@ class ClientTests(unittest.TestCase):
         with self.assertRaises(DownloadError):
             fetch_story(link, opener=opener)
 
+    def test_rejects_oversized_response_before_json_parsing(self):
+        link = ShareLink.parse(LINK)
+        response = FakeResponse({"code": 0, "data": {"html_content": "x" * MAX_STORY_RESPONSE_BYTES}})
+
+        with self.assertRaisesRegex(DownloadError, "响应超过"):
+            fetch_story(link, opener=lambda *_args, **_kwargs: response)
+        self.assertEqual(response.read_size, MAX_STORY_RESPONSE_BYTES + 1)
+
 
 class RenderTests(unittest.TestCase):
     def setUp(self):
@@ -182,6 +192,21 @@ class RenderTests(unittest.TestCase):
             )
             self.assertEqual(paths, {1: "example_assets/image-001.jpg"})
             self.assertEqual((Path(directory) / paths[1]).read_bytes(), b"fake-image")
+
+    def test_offline_image_total_limit_stops_before_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(DownloadError, "插图总量"):
+                download_images(
+                    parse_blocks(HTML + HTML),
+                    Path(directory),
+                    "example",
+                    opener=lambda _request, *, timeout: FakeImageResponse(),
+                    max_total_bytes=15,
+                )
+            self.assertEqual(
+                [path.name for path in (Path(directory) / "example_assets").iterdir()],
+                ["image-001.jpg"],
+            )
 
     def test_cli_writes_both_files_without_source_url(self):
         with tempfile.TemporaryDirectory() as directory:

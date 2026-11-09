@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fanqie-short-story-exporter"
-version = "0.3.0"
+version = "0.4.4"
 description = "Export the content returned by Fanqie short-story share links to TXT, Markdown or EPUB"
 readme = "README.md"
 requires-python = ">=3.10"

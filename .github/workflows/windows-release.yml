@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing release tag
         required: true
-        default: v0.3.0
+        default: v0.4.4
 
 permissions:
   contents: write
@@ -45,6 +45,6 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:RELEASE_TAG" "$($zip.FullName)" --clobber --repo "$env:GITHUB_REPOSITORY"
           } else {
-            gh release create "$env:RELEASE_TAG" "$($zip.FullName)" --title "$env:RELEASE_TAG" --notes '新增 EPUB 导出和手动多链接批量下载。' --repo "$env:GITHUB_REPOSITORY"
+            gh release create "$env:RELEASE_TAG" "$($zip.FullName)" --title "$env:RELEASE_TAG" --notes '修复桌面页面资源加载，并限制异常大的站点响应与单篇导出。' --repo "$env:GITHUB_REPOSITORY"
           }
           if ($LASTEXITCODE -ne 0) { throw 'GitHub release failed' }

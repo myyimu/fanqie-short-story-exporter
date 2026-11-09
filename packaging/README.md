@@ -20,7 +20,7 @@
 gradle --project-dir android :app:assemblePhoneDebug
 ```
 
-手机调试 APK 位于 `android/app/build/outputs/apk/phone/debug/app-phone-debug.apk`。`emulator` 构建另含 `x86_64`，供 CI 模拟器检查。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的调试包。调试签名可能随构建变化，正式安装请使用 [Android 0.4.3 发布页](https://github.com/myyimu/fanqie-short-story-exporter/releases/tag/v0.4.3)上的固定签名 APK。
+手机调试 APK 位于 `android/app/build/outputs/apk/phone/debug/app-phone-debug.apk`。`emulator` 构建另含 `x86_64`，供 CI 模拟器检查。GitHub Actions 的 **Build Android APK** 工作流也会生成可下载的调试包。调试签名可能随构建变化，正式安装请使用 [Android 0.4.4 发布页](https://github.com/myyimu/fanqie-short-story-exporter/releases/tag/v0.4.4)上的固定签名 APK。
 
 ### 固定发布签名
 

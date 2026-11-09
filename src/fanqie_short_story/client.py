@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .link import ShareLink
+from .limits import MAX_STORY_RESPONSE_BYTES
 
 
 class DownloadError(Exception):
@@ -45,7 +46,10 @@ def fetch_story(
         with opener(request, timeout=timeout) as response:
             if getattr(response, "status", 200) != 200:
                 raise DownloadError(f"站点返回 HTTP {response.status}")
-            payload = json.loads(response.read().decode("utf-8-sig"))
+            raw = response.read(MAX_STORY_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_STORY_RESPONSE_BYTES:
+                raise DownloadError("故事响应超过 4 MiB 大小限制")
+            payload = json.loads(raw.decode("utf-8-sig"))
     except HTTPError as error:
         raise DownloadError(f"站点返回 HTTP {error.code}") from None
     except (URLError, TimeoutError) as error:

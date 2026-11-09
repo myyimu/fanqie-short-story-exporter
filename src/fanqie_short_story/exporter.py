@@ -14,6 +14,7 @@ from .assets import download_images
 from .client import DownloadError, Story, fetch_story
 from .epub import render_epub
 from .link import resolve_share_link
+from .limits import MAX_OFFLINE_IMAGE_BYTES, MAX_SINGLE_EXPORT_BYTES
 from .render import Block, parse_blocks, render_markdown, render_txt
 
 
@@ -88,7 +89,12 @@ def load_export(
 
 
 @contextmanager
-def render_export(job: ExportJob, *, max_images: int | None = None) -> Iterator[ExportFiles]:
+def render_export(
+    job: ExportJob,
+    *,
+    max_images: int | None = None,
+    max_output_bytes: int = MAX_SINGLE_EXPORT_BYTES,
+) -> Iterator[ExportFiles]:
     """Render text and optional images, keeping temporary images until consumed."""
     with tempfile.TemporaryDirectory(prefix="fanqie-export-") as temporary:
         blocks = list(job.blocks)
@@ -98,19 +104,47 @@ def render_export(job: ExportJob, *, max_images: int | None = None) -> Iterator[
             if max_images is not None and image_count > max_images:
                 raise DownloadError(f"离线插图最多支持 {max_images} 张")
             image_paths = download_images(
-                blocks, Path(temporary), job.stem, timeout=job.timeout
+                blocks,
+                Path(temporary),
+                job.stem,
+                timeout=job.timeout,
+                max_total_bytes=min(MAX_OFFLINE_IMAGE_BYTES, max_output_bytes),
             )
 
+        image_bytes = sum(
+            (Path(temporary) / relative).stat().st_size
+            for relative in image_paths.values()
+        )
+        if image_bytes > min(MAX_OFFLINE_IMAGE_BYTES, max_output_bytes):
+            raise DownloadError("离线插图总量超过大小限制")
+        # Markdown keeps separate image files; EPUB embeds its images in the book bytes.
+        total_bytes = image_bytes if "md" in job.formats else 0
         text_files: dict[str, bytes] = {}
+
+        def add_text(name: str, data: bytes) -> None:
+            nonlocal total_bytes
+            if len(data) > max_output_bytes - total_bytes:
+                raise DownloadError("单篇导出超过大小限制")
+            text_files[name] = data
+            total_bytes += len(data)
+
         if "txt" in job.formats:
-            text_files[f"{job.stem}.txt"] = render_txt(job.story, blocks).encode("utf-8")
+            add_text(f"{job.stem}.txt", render_txt(job.story, blocks).encode("utf-8"))
         if "md" in job.formats:
-            text_files[f"{job.stem}.md"] = render_markdown(
-                job.story, blocks, image_paths
-            ).encode("utf-8")
+            add_text(
+                f"{job.stem}.md",
+                render_markdown(job.story, blocks, image_paths).encode("utf-8"),
+            )
         if "epub" in job.formats:
-            text_files[f"{job.stem}.epub"] = render_epub(
-                job.story, blocks, image_paths, Path(temporary)
+            add_text(
+                f"{job.stem}.epub",
+                render_epub(
+                    job.story,
+                    blocks,
+                    image_paths,
+                    Path(temporary),
+                    max_output_bytes=max_output_bytes - total_bytes,
+                ),
             )
         images = (
             {relative: Path(temporary) / relative for relative in image_paths.values()}

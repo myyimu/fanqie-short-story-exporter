@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import io
 import mimetypes
 import re
+import tempfile
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -12,6 +12,7 @@ from html import escape
 from pathlib import Path
 
 from .client import DownloadError, Story
+from .limits import MAX_SINGLE_EXPORT_BYTES
 from .render import Block
 
 
@@ -41,6 +42,8 @@ def render_epub(
     blocks: list[Block],
     image_paths: dict[int, str] | None = None,
     assets_root: Path | None = None,
+    *,
+    max_output_bytes: int = MAX_SINGLE_EXPORT_BYTES,
 ) -> bytes:
     """Embed downloaded images; otherwise mark their positions without remote URLs."""
     embedded: dict[int, tuple[str, str, Path]] = {}
@@ -111,16 +114,19 @@ def render_epub(
         '</rootfiles></container>'
     )
 
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w") as archive:
-        archive.writestr("mimetype", MIMETYPE, compress_type=zipfile.ZIP_STORED)
-        for name, content in (
-            ("META-INF/container.xml", container),
-            ("OEBPS/content.opf", package),
-            ("OEBPS/nav.xhtml", nav),
-            ("OEBPS/chapter.xhtml", chapter),
-        ):
-            archive.writestr(name, content.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
-        for href, _, source in embedded.values():
-            archive.write(source, f"OEBPS/{href}", compress_type=zipfile.ZIP_DEFLATED)
-    return output.getvalue()
+    with tempfile.TemporaryFile() as output:
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("mimetype", MIMETYPE, compress_type=zipfile.ZIP_STORED)
+            for name, content in (
+                ("META-INF/container.xml", container),
+                ("OEBPS/content.opf", package),
+                ("OEBPS/nav.xhtml", nav),
+                ("OEBPS/chapter.xhtml", chapter),
+            ):
+                archive.writestr(name, content.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+            for href, _, source in embedded.values():
+                archive.write(source, f"OEBPS/{href}", compress_type=zipfile.ZIP_DEFLATED)
+        if output.tell() > max_output_bytes:
+            raise DownloadError("单篇导出超过大小限制")
+        output.seek(0)
+        return output.read()

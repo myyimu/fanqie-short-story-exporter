@@ -10,20 +10,22 @@
 
 ## 快速开始
 
-### Windows：下载免安装版
+### Windows 0.4.4：下载免安装版
 
-1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.3.0/FanqieShortStoryExporter-0.3.0-Windows.zip) 并解压。
+1. [下载 Windows ZIP](https://github.com/myyimu/fanqie-short-story-exporter/releases/download/v0.4.4/FanqieShortStoryExporter-0.4.4-Windows.zip) 并解压。
 2. 双击 `FanqieShortStoryExporter.exe`。程序会自动在浏览器中打开本机界面，无需另装 Python。
 3. 用完后点击界面右上角的「退出」。当前 EXE 未做代码签名，运行前请核对下载来源。
 
-### Android：安装正式版 APK
+### Android 0.4.4：安装正式版 APK
 
-1. 从 [Android 0.4.3 发布页](https://github.com/myyimu/fanqie-short-story-exporter/releases/tag/v0.4.3) 下载 `Fanqie-Short-Story-Exporter-Android-0.4.3-signed.apk`。
+1. 从 [Android 0.4.4 发布页](https://github.com/myyimu/fanqie-short-story-exporter/releases/tag/v0.4.4) 下载 `Fanqie-Short-Story-Exporter-Android-0.4.4-signed.apk`。
 2. 在手机上打开 APK 安装。该安装包支持 Android 7.0 及更新版本的 64 位 ARM 手机。
 
 正式版使用固定发布签名，可覆盖安装此前相同签名的版本。调试版使用不同签名，切换到正式版时需要先卸载调试版。模拟器的 `x86_64` 调试包仍可从 GitHub Actions 的 **Build Android APK** 构建产物下载。
 
 Android 与桌面版共用同一份页面文件。打开应用后可粘贴分享文案，也可在其他应用中使用「分享」发送给番茄短故事导出器。选择 TXT、Markdown 或 EPUB 后点击「下载故事」，再用系统文件选择器指定保存位置；保存后可从结果卡片打开保存位置。多篇仍限 10 条链接。
+
+单篇导出上限 32 MiB，离线图片总量上限 16 MiB；站点正文响应超过 4 MiB 时会停止导出。
 
 Android 0.4.3 起可在「下载记录」阅读已保存的 TXT、Markdown 和 EPUB，也可打开 ZIP 并选择其中的故事、EPUB 或导出报告阅读。EPUB 支持目录、上一章／下一章、内嵌图片和跨重启阅读位置。可添加之前保存的文件；所有格式仍可交给其他应用打开。ZIP 是多篇或多格式导出时生成的合集，不会在应用内自动解压。[阅读功能与限制](docs/android-reading-roadmap.md)。
 
@@ -44,7 +46,7 @@ fanqie-short-story-ui
 
 ![桌面界面示例：选择 TXT、Markdown 或 EPUB](docs/images/desktop.png)
 
-### Android 0.4.3
+### Android 界面
 
 以下截图来自 320 × 640 Android 模拟器，展示的是测试文件。
 

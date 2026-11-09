@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import secrets
 import sys
+import tempfile
 import threading
 import webbrowser
 import zipfile
@@ -18,6 +18,7 @@ from urllib.parse import quote
 from . import __version__
 from .client import DownloadError
 from .exporter import load_export, render_export
+from .limits import MAX_SINGLE_EXPORT_BYTES
 
 
 MAX_REQUEST_BYTES = 32 * 1024
@@ -28,6 +29,7 @@ MAX_BATCH_OUTPUT_BYTES = 64 * 1024 * 1024
 STATIC_TYPES = {
     "/app.css": "text/css; charset=utf-8",
     "/app.js": "text/javascript; charset=utf-8",
+    "/library.js": "text/javascript; charset=utf-8",
 }
 
 
@@ -45,7 +47,9 @@ class ExportResult:
 def prepare_export(raw_url: object, formats: object, images: object) -> ExportResult:
     """Create one downloadable file from the response for the supplied link."""
     job = load_export(raw_url, formats, images)
-    with render_export(job, max_images=MAX_OFFLINE_IMAGES) as exported:
+    with render_export(
+        job, max_images=MAX_OFFLINE_IMAGES, max_output_bytes=MAX_SINGLE_EXPORT_BYTES
+    ) as exported:
         if len(exported.text) == 1 and not exported.images:
             name, data = next(iter(exported.text.items()))
             content_type = (
@@ -56,13 +60,19 @@ def prepare_export(raw_url: object, formats: object, images: object) -> ExportRe
         else:
             name = f"{job.stem}.zip"
             content_type = "application/zip"
-            buffer = io.BytesIO()
-            with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-                for filename, content in exported.text.items():
-                    bundle.writestr(filename, content)
-                for relative_path, source in exported.images.items():
-                    bundle.write(source, arcname=relative_path)
-            data = buffer.getvalue()
+            with tempfile.TemporaryFile() as buffer:
+                with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+                    for filename, content in exported.text.items():
+                        bundle.writestr(filename, content)
+                    for relative_path, source in exported.images.items():
+                        bundle.write(source, arcname=relative_path)
+                if buffer.tell() > MAX_SINGLE_EXPORT_BYTES:
+                    raise DownloadError("单篇导出超过大小限制")
+                buffer.seek(0)
+                data = buffer.read()
+
+    if len(data) > MAX_SINGLE_EXPORT_BYTES:
+        raise DownloadError("单篇导出超过大小限制")
 
     return ExportResult(
         name, content_type, data, job.story.title, job.story.author, job.characters
@@ -78,51 +88,59 @@ def prepare_batch_export(raw_urls: object, formats: object, images: object) -> E
     ):
         raise ValueError(f"请粘贴 2–{MAX_BATCH_STORIES} 条短故事链接，每行一条")
 
-    buffer = io.BytesIO()
     failures: list[str] = []
     seen_urls: set[str] = set()
     seen_stems: set[str] = set()
     total_bytes = 0
     total_characters = 0
     success_count = 0
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-        for index, raw_url in enumerate(raw_urls, 1):
-            try:
-                if raw_url.strip() in seen_urls:
-                    failures.append(f"第 {index} 条：重复链接")
-                    continue
-                seen_urls.add(raw_url.strip())
-                job = load_export(raw_url, formats, images)
-                if job.stem in seen_stems:
-                    failures.append(f"第 {index} 条：重复作品")
-                    continue
-                with render_export(job, max_images=MAX_OFFLINE_IMAGES) as exported:
-                    size = sum(len(content) for content in exported.text.values())
-                    size += sum(source.stat().st_size for source in exported.images.values())
-                    if total_bytes + size > MAX_BATCH_OUTPUT_BYTES:
-                        failures.append(f"第 {index} 条：批量文件超过大小限制")
+    with tempfile.TemporaryFile() as buffer:
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+            for index, raw_url in enumerate(raw_urls, 1):
+                try:
+                    if raw_url.strip() in seen_urls:
+                        failures.append(f"第 {index} 条：重复链接")
                         continue
-                    for filename, content in exported.text.items():
-                        bundle.writestr(filename, content)
-                    for relative_path, source in exported.images.items():
-                        bundle.write(source, arcname=relative_path)
-                    total_bytes += size
-                seen_stems.add(job.stem)
-                total_characters += job.characters
-                success_count += 1
-            except (ValueError, DownloadError) as error:
-                failures.append(f"第 {index} 条：{error}")
-        if not success_count:
-            detail = failures[0] if failures else "没有可导出的故事"
-            raise DownloadError(f"没有成功导出的故事：{detail}")
-        if failures:
-            report = f"成功 {success_count} 篇，未完成 {len(failures)} 篇\n\n" + "\n".join(failures) + "\n"
-            bundle.writestr("export-report.txt", report.encode("utf-8"))
+                    seen_urls.add(raw_url.strip())
+                    job = load_export(raw_url, formats, images)
+                    if job.stem in seen_stems:
+                        failures.append(f"第 {index} 条：重复作品")
+                        continue
+                    with render_export(
+                        job,
+                        max_images=MAX_OFFLINE_IMAGES,
+                        max_output_bytes=MAX_SINGLE_EXPORT_BYTES,
+                    ) as exported:
+                        size = sum(len(content) for content in exported.text.values())
+                        size += sum(source.stat().st_size for source in exported.images.values())
+                        if total_bytes + size > MAX_BATCH_OUTPUT_BYTES:
+                            failures.append(f"第 {index} 条：批量文件超过大小限制")
+                            continue
+                        for filename, content in exported.text.items():
+                            bundle.writestr(filename, content)
+                        for relative_path, source in exported.images.items():
+                            bundle.write(source, arcname=relative_path)
+                        total_bytes += size
+                    seen_stems.add(job.stem)
+                    total_characters += job.characters
+                    success_count += 1
+                except (ValueError, DownloadError) as error:
+                    failures.append(f"第 {index} 条：{error}")
+            if not success_count:
+                detail = failures[0] if failures else "没有可导出的故事"
+                raise DownloadError(f"没有成功导出的故事：{detail}")
+            if failures:
+                report = f"成功 {success_count} 篇，未完成 {len(failures)} 篇\n\n" + "\n".join(failures) + "\n"
+                bundle.writestr("export-report.txt", report.encode("utf-8"))
+        if buffer.tell() > MAX_BATCH_OUTPUT_BYTES:
+            raise DownloadError("批量文件超过大小限制")
+        buffer.seek(0)
+        archive_data = buffer.read()
 
     return ExportResult(
         f"Fanqie-Short-Stories-{success_count}.zip",
         "application/zip",
-        buffer.getvalue(),
+        archive_data,
         f"已导出 {success_count} 篇故事",
         "",
         total_characters,
