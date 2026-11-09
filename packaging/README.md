@@ -24,6 +24,6 @@ gradle --project-dir android :app:assemblePhoneDebug
 
 ### 固定发布签名
 
-**Build signed Android APK** 工作流仅在 `main` 上手动触发。它从仓库 Secrets `ANDROID_RELEASE_KEYSTORE_B64` 和 `ANDROID_RELEASE_PASSWORD` 恢复发布密钥，运行测试、构建 `phoneRelease`，并用 `android/release-cert.sha256` 校验 APK 的签名证书。密钥文件和密码不在 Git 仓库中。签名后的 APK 先作为 `fanqie-short-story-android-phone-signed` 构建产物提供，再上传到对应的 GitHub Release。
+**Build signed Android APK** 工作流仅在 `main` 上手动触发，并从所选发布标签检出源码。它从仓库 Secrets `ANDROID_RELEASE_KEYSTORE_B64` 和 `ANDROID_RELEASE_PASSWORD` 恢复发布密钥，运行测试、构建 `phoneRelease`，并用 `android/release-cert.sha256` 校验 APK 的签名证书。密钥文件和密码不在 Git 仓库中。签名后的 APK 作为 `fanqie-short-story-android-phone-signed` 构建产物保留，并自动上传到对应的 GitHub Release。
 
 本机签名时设置 `FANQIE_RELEASE_KEYSTORE` 为 keystore 的绝对路径、`FANQIE_RELEASE_PASSWORD` 为密码，然后运行 `gradle --project-dir android :app:assemblePhoneRelease`。后续每次发布都保留相同应用 ID 和证书，同时提高 `versionCode`。从先前调试签名版切换到发布签名版，需要先卸载调试版。

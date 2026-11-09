@@ -2,9 +2,14 @@ name: Build signed Android APK
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        default: v0.4.4
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -12,6 +17,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -25,6 +33,17 @@ jobs:
 
       - name: Run shared exporter tests
         run: python -m unittest discover -s tests -q
+
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Release tag must look like v0.4.4' >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          grep -Fq "versionName '$version'" android/app/build.gradle
 
       - name: Install Android platform
         run: |
@@ -74,3 +93,14 @@ jobs:
           name: fanqie-short-story-android-phone-signed
           path: android/app/build/outputs/apk/phone/release/app-phone-release.apk
           if-no-files-found: error
+
+      - name: Publish signed Android APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          apk="$RUNNER_TEMP/Fanqie-Short-Story-Exporter-Android-${version}-signed.apk"
+          cp android/app/build/outputs/apk/phone/release/app-phone-release.apk "$apk"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "$RELEASE_TAG" "$apk" --repo "$GITHUB_REPOSITORY"
